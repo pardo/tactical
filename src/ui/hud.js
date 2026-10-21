@@ -22,6 +22,7 @@ export function actionLabel(a) {
   if (a.type === 'grenade') return `${GRENADE_ICON[a.kind]} ${GRENADE_NAME[a.kind]}`;
   if (a.type === 'until') return `⏲ @${a.t}s`;
   if (a.type === 'breach') return '🧨 Breach';
+  if (a.type === 'cover') return '🛡 Cover';
   return ICON[a.type] ?? a.type;
 }
 
@@ -219,6 +220,7 @@ export function createHud(root, onAction) {
            ${btn('fire', '🎯 Fire at will', { arg: 'onSight', cls: w.fire === 'onSight' ? 'on' : '' })}${btn('fire', '🤫 Hold fire', { arg: 'hold', cls: w.fire === 'hold' ? 'on' : '' })}
          </div>
          <div class="row">
+           ${btn('addCover', '🛡 Take cover', { title: 'Get behind the nearest low cover facing the threat' })}
            ${btn('addStance', '▼ Crouch', { arg: 'crouch' })}${btn('addStance', '▲ Stand', { arg: 'stand' })}
            ${btn('pick', '➜ Face…', { arg: 'face', cls: model.pickMode === 'face' ? 'on' : '' })}
            ${btn('addWait', '⏱ +1s')}

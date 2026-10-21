@@ -63,3 +63,22 @@ describe('autonomy', () => {
     expect(a1.stance).toBe('crouch');
   });
 });
+
+describe('take cover action', () => {
+  it('moves behind the nearest low cover facing the threat and crouches', async () => {
+    const { applyPlans } = await import('../src/sim/world.js');
+    const { makeWaypoint } = await import('../src/sim/plan.js');
+    const w = createWorld(2, parseMap({ name: 'cv', rows: ['############', '#A........B#', '#..........#', '#.....=....#', '#..........#', '############'] }));
+    spawnSquads(w, { A: ['rifleman'], B: ['rifleman'] });
+    const [a, b] = w.soldiers;
+    a.fire = b.fire = 'hold';
+    const start = cellCenter(w.map, 4, 2);
+    // Face +x (toward the cover at column 6 / B's side), then take cover.
+    const wp = { ...makeWaypoint(start.x, start.z), fire: 'hold', actions: [{ type: 'face', x: start.x + 5, z: start.z }, { type: 'cover' }] };
+    applyPlans(w, 'A', { [a.id]: [wp] });
+    for (let i = 0; i < 60 * 6; i++) step(w);
+    const spot = cellCenter(w.map, 5, 3); // directly west of the cover tile
+    expect(Math.hypot(a.x - spot.x, a.z - spot.z)).toBeLessThan(0.05);
+    expect(a.stance).toBe('crouch');
+  });
+});

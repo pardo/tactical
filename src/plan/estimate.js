@@ -5,6 +5,7 @@ import { DOOR_OPEN_TIME } from '../sim/doors.js';
 import { TURN_SECONDS } from '../sim/constants.js';
 
 const FACE_TIME = 0.4; // rough average turn time
+const COVER_TIME = 1.2; // short hop to cover + crouch (destination unknown until it runs)
 
 const dist = (a, b) => Math.sqrt((b.x - a.x) ** 2 + (b.z - a.z) ** 2);
 
@@ -13,6 +14,7 @@ export function actionDuration(a, t = 0) {
   if (a.type === 'wait') return a.t;
   if (a.type === 'until') return Math.max(0, a.t - t);
   if (a.type === 'face') return FACE_TIME;
+  if (a.type === 'cover') return COVER_TIME;
   return ACTION_TIME[a.type] ?? 0;
 }
 

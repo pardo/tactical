@@ -1,10 +1,11 @@
 import { DT, TICK_RATE } from '../constants.js';
-import { headingTo, wrapAngle, length, PI } from '../fmath.js';
+import { headingTo, wrapAngle, length, PI, sin, cos } from '../fmath.js';
 import { findPath } from '../nav.js';
 import { turnToward } from './soldier.js';
 import { throwGrenade } from '../grenades.js';
 import { ROLES } from '../roles.js';
 import { handleDoorAhead, breachableDoor, breachDoor, BREACH_TIME } from '../doors.js';
+import { Tile, tileAt, isWalkable, worldToCell, cellCenter } from '../map.js';
 
 export const SPEED = { walk: 1.6, run: 3.6, crouch: 0.9, engaged: 1.0 }; // m/s
 const TURN_RATE = { walk: 7, run: 5 }; // rad/s
@@ -73,6 +74,46 @@ function moveAlongPath(world, s, wp, engaged) {
   s.moving = true;
 }
 
+const COVER_SEARCH = 2.5;
+const ORTHO = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/**
+ * Best tile within COVER_SEARCH metres that has low cover between it and the
+ * threat direction (dx, dz): nearest first, ties broken by "more forward" then
+ * "more to the right" of the threat direction, so mirrored situations pick
+ * mirrored spots for both teams.
+ */
+export function findCoverSpot(world, x, z, dx, dz) {
+  const { map } = world;
+  const c = worldToCell(map, x, z);
+  let best = null;
+  for (let oz = -3; oz <= 3; oz++) {
+    for (let ox = -3; ox <= 3; ox++) {
+      const cx = c.cx + ox;
+      const cz = c.cz + oz;
+      if (!isWalkable(map, cx, cz) || tileAt(map, cx, cz) === Tile.DOOR) continue;
+      const p = cellCenter(map, cx, cz);
+      const d = length(p.x - x, p.z - z);
+      if (d > COVER_SEARCH) continue;
+      const covered = ORTHO.some(([nx, nz]) => nx * dx + nz * dz >= 0.6 && tileAt(map, cx + nx, cz + nz) === Tile.LOW_COVER);
+      if (!covered) continue;
+      const fwd = (p.x - x) * dx + (p.z - z) * dz;
+      const right = (p.x - x) * -dz + (p.z - z) * dx;
+      const better =
+        !best ||
+        d < best.d - 1e-9 ||
+        (Math.abs(d - best.d) <= 1e-9 && (fwd > best.fwd + 1e-9 || (Math.abs(fwd - best.fwd) <= 1e-9 && right > best.right)));
+      if (better) best = { x: p.x, z: p.z, d, fwd, right };
+    }
+  }
+  return best;
+}
+
 /** Runs the current action; returns true when it has finished. */
 function runAction(world, s, a, engaged) {
   switch (a.type) {
@@ -86,6 +127,28 @@ function runAction(world, s, a, engaged) {
     case 'wait':
       s.actionTimer += DT;
       return s.actionTimer >= a.t;
+    case 'cover': {
+      // Insert a waypoint behind the nearest cover facing the threat (or our facing), crouched.
+      const tx = s.alert ? s.alert.x - s.x : sin(s.heading);
+      const tz = s.alert ? s.alert.z - s.z : cos(s.heading);
+      const len = length(tx, tz) || 1;
+      const spot = findCoverSpot(world, s.x, s.z, tx / len, tz / len);
+      if (spot) {
+        const wp = s.orders[0];
+        s.orders.splice(1, 0, {
+          x: spot.x,
+          z: spot.z,
+          move: wp.move,
+          fire: wp.fire,
+          look: null,
+          actions: [
+            { type: 'stance', stance: 'crouch' },
+            { type: 'face', x: spot.x + tx / len, z: spot.z + tz / len },
+          ],
+        });
+      }
+      return true;
+    }
     case 'until':
       // Synchronise with the team: hold until this many seconds into the turn.
       return (world.tick - world.turnStart) / TICK_RATE >= a.t;

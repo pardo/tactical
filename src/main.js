@@ -811,6 +811,9 @@ function onAction(action, arg) {
     case 'addWait':
       P.addAction({ type: 'wait', t: 1 });
       break;
+    case 'addCover':
+      P.addAction({ type: 'cover' });
+      break;
     case 'addSync':
       P.addAction({ type: 'until', t: 1 });
       break;

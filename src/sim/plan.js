@@ -13,6 +13,7 @@
  *              | { type: 'wait', t }  // seconds
  *              | { type: 'until', t } // hold until t seconds into the turn (team sync)
  *              | { type: 'breach', x, z } // blow the closed door nearest (x, z)
+ *              | { type: 'cover' }    // move behind the nearest low cover facing the threat, crouch
  *              | { type: 'grenade', kind: 'frag' | 'flash' | 'smoke', x, z } ] }
  */
 export const MAX_WAYPOINTS = 16;
@@ -62,6 +63,8 @@ export function sanitizeWaypoints(map, waypoints) {
             return { type: 'until', t: Math.min(TURN_LENGTH, Math.max(0, finite(a.t, 1))) };
           case 'breach':
             return { type: 'breach', x: cx(a.x), z: cz(a.z) };
+          case 'cover':
+            return { type: 'cover' };
           default:
             return null;
         }
