@@ -3,6 +3,7 @@ import { headingTo, wrapAngle, length, PI } from '../fmath.js';
 import { hasLineOfSight } from '../los.js';
 import { WEAPONS, ROLES } from '../roles.js';
 import { turnToward, damageSoldier, EYE_HEIGHT, BODY_HEIGHT, LEGS_HEIGHT } from './soldier.js';
+import { makeNoise } from '../noise.js';
 
 const AIM_TOLERANCE = (4 * PI) / 180;
 const HOLDING_ARC = (15 * PI) / 180;
@@ -157,6 +158,7 @@ export function updateCombat(world, s) {
     });
     // Rounds cracking past keep heads down; hits less so (the target is busy being hit).
     t.suppression = Math.min(1, t.suppression + w.suppression * (hit ? 0.5 : 1));
+    makeNoise(world, s, 'shot');
     if (hit) damageSoldier(world, t, weaponDamage(s.weapon, length(t.x - s.x, t.z - s.z)), s.id);
     if (s.ammo <= 0) startReload(world, s);
   }

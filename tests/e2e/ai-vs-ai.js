@@ -30,6 +30,15 @@ async (page) => {
   if (!/wins|Draw/.test(card)) fail(`unexpected game over text "${card}"`);
   const log = await page.locator('#log').innerText();
   if (!/down/.test(log)) fail('log shows no kills');
+  // Sound: someone heard footsteps, a door or gunfire, and it was logged.
+  const sound = await page.evaluate(() => {
+    const g = window.__tactical.game;
+    return {
+      heardFrames: g.recorder.frames.filter((f) => f.heard.A.length || f.heard.B.length).length,
+      logged: g.log.filter((l) => l.text.includes('🔊')).length,
+    };
+  });
+  if (!sound.heardFrames || !sound.logged) fail(`no sounds heard: ${JSON.stringify(sound)}`);
 
   // Save the replay, load it back from the menu, and check it ends the same way.
   const winner = await page.evaluate(() => window.__tactical.game.match.world.winner);
@@ -57,5 +66,5 @@ async (page) => {
   });
   if (loaded.mode !== 'replay' || loaded.winner !== winner || loaded.map !== 'Warehouse') fail(`replay mismatch ${JSON.stringify(loaded)} vs ${winner}`);
   if (rewatchCursor > 600) fail(`rewatch did not restart (cursor ${rewatchCursor})`);
-  return `ok: Warehouse/zone "${card}", replay saved and reloaded (${loaded.frames} frames, same winner)`;
+  return `ok: Warehouse/zone "${card}", ${sound.logged} sounds logged, replay saved and reloaded (${loaded.frames} frames, same winner)`;
 }

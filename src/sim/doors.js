@@ -4,6 +4,7 @@ import { Tile, cellCenter, worldToCell, tileAt } from './map.js';
 import { length, headingTo, wrapAngle, PI } from './fmath.js';
 import { hasLineOfSight } from './los.js';
 import { damageSoldier, EYE_HEIGHT } from './soldier/soldier.js';
+import { makeNoise } from './noise.js';
 
 export const DOOR_OPEN_TIME = 0.6;
 export const BREACH_TIME = 1.2;
@@ -39,12 +40,14 @@ export function doorAt(world, x, z) {
   return world.doors.find((d) => d.cx === cx && d.cz === cz) ?? null;
 }
 
-export function openDoor(world, door, how = 'open') {
+/** @param by soldier opening it (heard by nearby enemies), or null */
+export function openDoor(world, door, how = 'open', by = null) {
   if (door.state !== 'closed') return;
   world.physics.removeCollider(door.collider, false);
   door.collider = null;
   door.state = how === 'breach' ? 'breached' : 'open';
   world.events.push({ type: 'door', id: door.id, state: door.state, x: door.x, z: door.z });
+  if (by) makeNoise(world, by, how === 'breach' ? 'breach' : 'door', door.x, door.z);
 }
 
 /**
@@ -61,7 +64,7 @@ export function handleDoorAhead(world, s, nx, nz) {
   s.doorTimer += DT;
   if (s.doorTimer >= DOOR_OPEN_TIME) {
     s.doorTimer = 0;
-    openDoor(world, door);
+    openDoor(world, door, 'open', s);
   }
   return true;
 }
@@ -84,7 +87,7 @@ export function breachableDoor(world, s, ax, az) {
 /** Blow a door: it is gone, and people just behind it are stunned or hurt. */
 export function breachDoor(world, s, door) {
   s.charges--;
-  openDoor(world, door, 'breach');
+  openDoor(world, door, 'breach', s);
   for (const t of world.soldiers) {
     if (!t.alive || t === s) continue;
     const d = length(t.x - door.x, t.z - door.z);

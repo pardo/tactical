@@ -211,8 +211,11 @@ export function createAI(team, seed = 1) {
     return best && { x: best.x, z: best.z };
   }
 
-  /** Call after every sim tick: remember what the team sees. */
+  /** Call after every sim tick: remember what the team sees and hears. */
   function observe(world) {
+    for (const e of world.events) {
+      if (e.type === 'noise' && e.heardBy === team) memory.set(e.id, { x: e.x, z: e.z, tick: world.tick, heard: true });
+    }
     for (const s of world.soldiers) {
       if (s.team !== team || !s.alive) continue;
       for (const id of s.visible) {
@@ -251,7 +254,7 @@ export function createAI(team, seed = 1) {
     const zone = world.objective?.type === 'zone' ? { x: world.objective.x, z: world.objective.z } : null;
     if (known.length) {
       objective = known.reduce((a, b) => (dist(a, home) <= dist(b, home) ? a : b));
-      objLabel = `last seen #${objective.id}`;
+      objLabel = `${objective.heard ? 'heard' : 'last seen'} #${objective.id}`;
       searchTarget = null;
     } else if (zone) {
       objective = zone;

@@ -33,6 +33,11 @@ async (page) => {
   if (s.wps.length !== 1) fail(`expected 1 waypoint after tap, got ${s.wps.length}`);
 
   await page.getByRole('button', { name: '🏃 Run' }).tap();
+  // Phones have no tooltips: tapping a control explains it in the panel.
+  // (The panel re-renders on the next animation frame, so wait for it.)
+  await page.locator('#bottom .row.explain', { hasText: 'Run:' }).waitFor({ timeout: 2000 }).catch(() => {});
+  const explain = await page.locator('#bottom .row.explain').innerText();
+  if (!/^🏃 Run: .*loud/.test(explain)) fail(`no explanation after tapping Run: "${explain}"`);
   await page.getByRole('button', { name: '▼ Crouch' }).tap();
   await page.getByRole('button', { name: '⏱ +1s' }).tap();
   await page.getByRole('button', { name: /Flash/ }).tap();
@@ -42,6 +47,15 @@ async (page) => {
   const types = s.wps[0].actions.map((a) => a.type).join(',');
   if (s.wps[0].actions[2]?.kind !== 'flash') fail('grenade kind not flash');
   if (s.wps[0].move !== 'run' || types !== 'stance,wait,grenade') fail(`bad waypoint edit: ${JSON.stringify(s.wps[0])}`);
+  // Selecting the waypoint again shows its plain-language summary.
+  await page.evaluate(() => window.__tactical.game.planning.deselectWaypoint());
+  await page.evaluate(() => window.__tactical.game.planning.selectWaypoint(window.__tactical.game.planning.state.selectedId, 0));
+  await page.locator('#bottom .row.explain', { hasText: '📋' }).waitFor({ timeout: 2000 }).catch(() => {});
+  const summary = await page.locator('#bottom .row.explain').innerText();
+  if (summary !== '📋 Run here, firing at will, then crouch → wait 1s → throw a flashbang.') fail(`summary: "${summary}"`);
+  const panel = await page.locator('#bottom .panel').boundingBox();
+  const vh = page.viewportSize().height;
+  if (panel.y + panel.height > vh + 1 || panel.height > vh * 0.5) fail(`waypoint panel too tall: ${JSON.stringify(panel)} of ${vh}`);
 
   // Drag the waypoint with a finger: project it to screen, then drag 40px.
   const at = await page.evaluate(() => {

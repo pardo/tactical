@@ -1,4 +1,5 @@
 import { TOOLS } from './editor.js';
+import { ACTION_HELP } from './help.js';
 
 /**
  * DOM overlay. Buttons carry data-action / data-arg; clicks are delegated to
@@ -15,6 +16,8 @@ function esc(s) {
 
 const btn = (action, label, { arg = '', cls = '', title = '', disabled = false } = {}) =>
   `<button data-action="${action}" data-arg="${esc(arg)}" class="${cls}" title="${esc(title)}" ${disabled ? 'disabled' : ''}>${label}</button>`;
+/** Tooltip (desktop) from the shared help text. */
+const tip = (key) => ACTION_HELP[key]?.[1] ?? '';
 
 export function actionLabel(a) {
   if (a.type === 'stance') return ICON.stance[a.stance];
@@ -101,7 +104,7 @@ export function createHud(root, onAction) {
         inMatch
           ? `<div class="row1">${btn('togglePause', paused ? '▶' : '⏸', { title: 'Play / pause' })}${btn('cycleSpeed', `${speed}×`, { title: 'Playback speed' })}${btn('toggleMenu', '⋯', { cls: menuOpen ? 'on' : '', title: 'More' })}${btn('quit', '✕', { title: 'Quit to menu' })}</div>` +
               (menuOpen
-                ? `<div class="more">${emotes ? `<div class="emotes">${emotes.map((e) => btn('emote', esc(e), { arg: e })).join('')}</div>` : ''}${toggle('toggleLog', 'Event log', logOpen)}${toggle('toggleCones', 'Vision cones', showCones)}${toggle('togglePlans', 'Show plans', showPlans)}${toggle('toggleMute', 'Sound', !muted)}${btn('resetCamera', '⟲ Reset camera')}${btn('fullscreen', '⤢ Fullscreen')}</div>`
+                ? `<div class="more">${emotes ? `<div class="emotes">${emotes.map((e) => btn('emote', esc(e), { arg: e })).join('')}</div>` : ''}${toggle('toggleLog', 'Event log', logOpen)}${toggle('toggleCones', 'Vision cones', showCones)}${toggle('togglePlans', 'Show plans', showPlans)}${toggle('toggleMute', 'Sound', !muted)}${btn('resetCamera', '⟲ Reset camera')}${btn('fullscreen', '⤢ Fullscreen')}${btn('howTo', '❓ How to play')}</div>`
                 : '')
           : btn('fullscreen', '⤢', { title: 'Fullscreen' }),
       );
@@ -215,25 +218,26 @@ export function createHud(root, onAction) {
         JSON.stringify(model),
         `<div class="row info">${esc(model.label)} · waypoint ${model.index + 1}/${model.count} · arrive ${model.eta}</div>
          <div class="row seg">
-           ${btn('move', '🚶 Walk', { arg: 'walk', cls: w.move === 'walk' ? 'on' : '' })}${btn('move', '🏃 Run', { arg: 'run', cls: w.move === 'run' ? 'on' : '' })}
+           ${btn('move', '🚶 Walk', { arg: 'walk', cls: w.move === 'walk' ? 'on' : '', title: tip('move:walk') })}${btn('move', '🏃 Run', { arg: 'run', cls: w.move === 'run' ? 'on' : '', title: tip('move:run') })}
            <span class="sep"></span>
-           ${btn('fire', '🎯 Fire at will', { arg: 'onSight', cls: w.fire === 'onSight' ? 'on' : '' })}${btn('fire', '↩ Return fire', { arg: 'return', cls: w.fire === 'return' ? 'on' : '', title: 'Only shoot enemies who are shooting at you' })}${btn('fire', '🤫 Hold fire', { arg: 'hold', cls: w.fire === 'hold' ? 'on' : '' })}
+           ${btn('fire', '🎯 Fire at will', { arg: 'onSight', cls: w.fire === 'onSight' ? 'on' : '', title: tip('fire:onSight') })}${btn('fire', '↩ Return fire', { arg: 'return', cls: w.fire === 'return' ? 'on' : '', title: tip('fire:return') })}${btn('fire', '🤫 Hold fire', { arg: 'hold', cls: w.fire === 'hold' ? 'on' : '', title: tip('fire:hold') })}
          </div>
          <div class="row">
-           ${btn('addCover', '🛡 Take cover', { title: 'Get behind the nearest low cover facing the threat' })}
-           ${btn('addStance', '▼ Crouch', { arg: 'crouch' })}${btn('addStance', '▲ Stand', { arg: 'stand' })}
-           ${btn('pick', '➜ Face…', { arg: 'face', cls: model.pickMode === 'face' ? 'on' : '' })}
-           ${btn('addWait', '⏱ +1s')}
-           ${btn('addSync', '⏲ Sync', { title: 'Hold until a moment of the turn (tap again: +0.5s)' })}
-           ${model.charges > 0 ? btn('pick', `🧨 Breach ×${model.charges}…`, { arg: 'breach', cls: model.pickMode === 'breach' ? 'on' : '' }) : ''}
+           ${btn('addCover', '🛡 Take cover', { title: tip('cover') })}
+           ${btn('addStance', '▼ Crouch', { arg: 'crouch', title: tip('stance:crouch') })}${btn('addStance', '▲ Stand', { arg: 'stand', title: tip('stance:stand') })}
+           ${btn('pick', '➜ Face…', { arg: 'face', cls: model.pickMode === 'face' ? 'on' : '', title: tip('face') })}
+           ${btn('addWait', '⏱ +1s', { title: tip('wait') })}
+           ${btn('addSync', '⏲ Sync', { title: tip('until') })}
+           ${model.charges > 0 ? btn('pick', `🧨 Breach ×${model.charges}…`, { arg: 'breach', cls: model.pickMode === 'breach' ? 'on' : '', title: tip('breach') }) : ''}
            ${['frag', 'flash', 'smoke']
              .filter((k) => model.gear[k] > 0)
-             .map((k) => btn('pick', `${GRENADE_ICON[k]} ${GRENADE_NAME[k]} ×${model.gear[k]}…`, { arg: `grenade:${k}`, cls: model.pickMode === `grenade:${k}` ? 'on' : '' }))
+             .map((k) => btn('pick', `${GRENADE_ICON[k]} ${GRENADE_NAME[k]} ×${model.gear[k]}…`, { arg: `grenade:${k}`, cls: model.pickMode === `grenade:${k}` ? 'on' : '', title: tip(`grenade:${k}`) }))
              .join('')}
-           ${btn('pick', '👁 Look while moving…', { arg: 'look', cls: model.pickMode === 'look' ? 'on' : '' })}
+           ${btn('pick', '👁 Look while moving…', { arg: 'look', cls: model.pickMode === 'look' ? 'on' : '', title: tip('look') })}
            ${btn('deleteWaypoint', '🗑', { cls: 'danger', title: 'Delete waypoint' })}
          </div>
-         ${actions || w.look ? `<div class="row actions">${w.look ? btn('clearLook', '👁 Look ✕', { cls: 'action' }) : ''}${actions}</div>` : ''}`,
+         ${actions || w.look ? `<div class="row actions"><span class="lbl">Queued:</span>${w.look ? btn('clearLook', '👁 Look ✕', { cls: 'action' }) : ''}${actions}</div>` : ''}
+         <div class="row explain">${esc(model.explain ?? `📋 ${model.summary}`)}</div>`,
       );
     },
 
@@ -246,6 +250,12 @@ export function createHud(root, onAction) {
     },
   };
 }
+
+const HELP_KEYS = {
+  leg: ['move:walk', 'move:run', 'fire:onSight', 'fire:return', 'fire:hold', 'look'],
+  arrival: ['cover', 'stance:crouch', 'stance:stand', 'face', 'wait', 'until', 'breach', 'grenade:frag', 'grenade:flash', 'grenade:smoke'],
+};
+const helpRow = (key) => `<dt>${esc(ACTION_HELP[key][0])}</dt><dd>${esc(ACTION_HELP[key][1])}</dd>`;
 
 const settingsRows = ({ mapName, modeName, modeHelp, timer }) => `
   <div class="setting">${btn('cycleMap', `🗺 ${esc(mapName)} ▸`)}${btn('cycleMode', `🎯 ${esc(modeName)} ▸`)}${btn('cycleTimer', `⏱ ${timer ? `${timer}s to plan` : 'No time limit'} ▸`)}</div>
@@ -333,7 +343,7 @@ export const overlays = {
       <p>${esc(text)}</p>
       ${actions}
     </div>`,
-  howTo: () => `
+  howTo: (inMatch = false) => `
     <div class="card howto">
       <h2>How to play</h2>
       <p><b>Plan</b> moves for your 4 soldiers, press <b>GO</b>, and both sides' plans play out
@@ -343,10 +353,15 @@ export const overlays = {
         <li><b>Tap a soldier</b> (or a chip at the bottom) to select it.</li>
         <li><b>Tap the map</b> to add a waypoint, <b>hold</b> to add a running one.</li>
         <li><b>Tap a waypoint</b> to edit it, <b>drag</b> (or hold, then drag) to move it.</li>
-        <li>Each waypoint can: walk/run, fire at will/hold fire, <b>look while moving</b>, and on arrival
-          crouch, <b>face</b> a direction, wait, <b>sync</b> to a moment of the turn, throw a grenade or breach a door.</li>
         <li>Labels show when each soldier arrives; the white ring is where they'll be when the 5 s end.</li>
+        <li>The panel's 📋 line says in words what the selected waypoint will do. Tap any button and that line explains it.</li>
       </ul>
+      <h3>Waypoint orders</h3>
+      <p class="small">How the soldier gets to the waypoint (they stay in effect until changed):</p>
+      <dl class="help">${HELP_KEYS.leg.map(helpRow).join('')}</dl>
+      <p class="small">What the soldier does on arrival, one after another, in the order you add them
+      (tap a queued one to remove it):</p>
+      <dl class="help">${HELP_KEYS.arrival.map(helpRow).join('')}</dl>
       <h3>Fighting</h3>
       <ul>
         <li>Soldiers shoot on their own. <b>Reaction time</b> decides most fights: holding an angle
@@ -355,9 +370,17 @@ export const overlays = {
         <li>Doors block sight. Opening one takes a moment; a <b>breach charge</b> blows it and stuns whoever is behind.</li>
         <li>Flashbangs blind, smoke blocks sight, frags hurt everyone nearby, friends included.</li>
       </ul>
+      <h3>Sound</h3>
+      <ul>
+        <li>Noise goes through walls. Enemies hear <b>running</b> (9 m), <b>opening a door</b> (14 m),
+          <b>gunfire</b> (24 m) and <b>breaches</b> (30 m). Walking and crouching are silent.</li>
+        <li>When your squad hears an enemy you can't see, a see-through <b>sound ghost</b> marked ? appears
+          where the noise came from, with a ripple; it fades over two turns. Idle soldiers turn toward the sound.</li>
+        <li>A plain ring marks where an enemy was last <b>seen</b>.</li>
+      </ul>
       <h3>Camera</h3>
       <ul><li>Drag to pan, pinch to zoom, twist to rotate. Tap a selected soldier's chip again to centre on them.</li></ul>
-      ${btn('menu', 'Back', { cls: 'go' })}
+      ${inMatch ? btn('closeHelp', 'Back to the game', { cls: 'go' }) : btn('menu', 'Back', { cls: 'go' })}
     </div>`,
   handoff: (teamName) => `
     <div class="card">

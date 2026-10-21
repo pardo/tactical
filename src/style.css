@@ -121,6 +121,8 @@ button.danger { color: #ff7a6b; }
 #bottom .row.info { color: var(--muted); font-size: 12px; padding: 0 2px; }
 #bottom .row .sep { flex: 0 0 8px; }
 #bottom .row button { flex: 0 0 auto; min-height: 38px; padding: 0 9px; font-size: 13px; }
+#bottom .row.actions .lbl { color: var(--muted); font-size: 12px; }
+#bottom .row.explain { font-size: 12px; line-height: 1.35; padding: 2px 4px; color: var(--fg); background: rgba(255, 255, 255, 0.06); border-radius: 8px; }
 #bottom .row.actions button { min-height: 32px; font-size: 12px; border-style: dashed; }
 
 #bottom .timeline { display: flex; gap: 4px; align-items: center; }
@@ -246,3 +248,7 @@ button.danger { color: #ff7a6b; }
 }
 #top .buttons .more .emotes { display: flex; gap: 4px; }
 #top .buttons .more .emotes button { min-width: 40px; padding: 0 6px; text-align: center; }
+
+.howto dl.help { margin: 4px 0 10px; font-size: 13px; }
+.howto dl.help dt { font-weight: 600; margin-top: 6px; }
+.howto dl.help dd { margin: 1px 0 0 1.4em; color: var(--muted); }

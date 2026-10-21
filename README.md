@@ -20,6 +20,9 @@ cover and turn toward threats, so *how* you move (holding an angle vs. running i
   arrival take cover, crouch/stand, face, wait, sync to a moment of the turn, frag/flash/smoke,
   breach a door.
 - Doors, breach charges, destructible low cover, suppression, flashbang blindness, smoke.
+- Sound: running, doors, gunfire and breaches are heard through walls; the listening side sees a
+  "sound ghost" where the noise came from, idle soldiers turn toward it, and the AI hunts it.
+- Every planning button explains itself when tapped, and each waypoint is summarised in words.
 - Save any match as a replay file (a few KB) and load it to rewatch.
 - Installable as an app (PWA) from the browser menu when served over https.
 

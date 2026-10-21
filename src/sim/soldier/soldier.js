@@ -46,6 +46,7 @@ export function createSoldier(world, { team, x, z, heading = 0, role = 'rifleman
     target: null,
     reaction: 0,
     shotCooldown: 0,
+    lastNoise: {}, // kind → tick of the last throttled noise (see noise.js)
   };
   world.soldiers.push(soldier);
   return soldier;
@@ -84,7 +85,7 @@ export function damageSoldier(world, s, amount, sourceId) {
   if (src && src.team !== s.team && !s.visible.includes(src.id)) s.alert = { x: src.x, z: src.z, ttl: ALERT_TTL.shot };
 }
 
-export const ALERT_TTL = { shot: 2, callout: 1.5 };
+export const ALERT_TTL = { shot: 2, callout: 1.5, noise: 1.2 };
 
 export function resolveDeaths(world) {
   for (const s of world.soldiers) if (s.alive && s.hp <= 0) killSoldier(world, s);

@@ -1,3 +1,4 @@
+import { helpFor, describeWaypoint } from './ui/help.js';
 import './style.css';
 import { initPhysics } from './sim/physics.js';
 import { TICK_RATE, TURN_TICKS, DT } from './sim/constants.js';
@@ -41,6 +42,7 @@ const PICK_HINTS = {
   breach: 'Tap the door to blow (stand next to it)',
 };
 const LOG_LINES = 10;
+const EXPLAIN_MS = 8000;
 
 const app = document.getElementById('app');
 let view;
@@ -413,9 +415,12 @@ function toastFrame(frame) {
     if (e.type === 'death' && known(e.id)) text = `☠ ${L[e.id]} down`;
     else if (e.type === 'breach' && known(e.id)) text = `💥 ${L[e.id]} breaches a door`;
     else if (e.type === 'blinded' && known(e.id)) text = `⚡ ${L[e.id]} blinded`;
+    else if (e.type === 'noise' && e.kind === 'door' && viewer && e.heardBy === viewer && !vision.has(e.id)) text = '🔊 You hear a door open';
     if (text) g.toast = { text, until: performance.now() + 2200 };
   }
 }
+
+const NOISE_TEXT = { step: 'running footsteps', door: 'a door', breach: 'a breach', shot: 'gunfire' };
 
 function logFrame(i, frame) {
   const L = g.match.labels;
@@ -435,6 +440,12 @@ function logFrame(i, frame) {
       g.log.push({ i, team: null, cls: team(e.id), text: `${ts} ${L[e.id]} blinded ${e.duration.toFixed(1)}s` });
     } else if (e.type === 'breach') {
       g.log.push({ i, team: null, cls: 'kill', text: `${ts} 💥 ${L[e.id]} breaches a door` });
+    } else if (e.type === 'noise') {
+      // Only news if the listeners can't already see the source.
+      if (frameVisionSet(frame, e.heardBy).has(e.id)) continue;
+      // Footsteps and gunfire repeat: log them at most once every 2 s per soldier.
+      if (e.kind !== 'door' && e.kind !== 'breach' && g.log.some((l) => l.noise === e.id && l.kind === e.kind && i - l.i < 120)) continue;
+      g.log.push({ i, team: e.heardBy, cls: e.heardBy, noise: e.id, kind: e.kind, text: `${ts} 🔊 ${e.heardBy === 'A' ? 'Blue' : 'Red'} hears ${NOISE_TEXT[e.kind]}` });
     } else if (e.type === 'reload') {
       g.log.push({ i, team: team(e.id), cls: team(e.id), text: `${ts} ${L[e.id]} reloading` });
     }
@@ -566,6 +577,7 @@ function handleTap(x, y, long) {
   const P = g.planning;
   if (P.state.pickMode) {
     if (p && P.applyPick(p.x, p.z)) marker.show(p, 0xc28bff);
+    g.explain = null; // back to the summary, which now includes the new order
     return;
   }
   if (!long) {
@@ -696,7 +708,12 @@ function onAction(action, arg) {
     case 'onlineMenu':
       return hud.overlay(overlays.online());
     case 'howTo':
-      return hud.overlay(overlays.howTo());
+      ui.menuOpen = false;
+      if (g) g.help = true; // drawn by the frame loop, over the game
+      return hud.overlay(overlays.howTo(!!g));
+    case 'closeHelp':
+      if (g) g.help = false;
+      return hud.overlay(null);
     case 'editor': {
       const def = getMapDef(ui.mapId) ?? MAPS[DEFAULT_MAP];
       return openEditor({ name: isCustomMap(ui.mapId) ? def.name : `${def.name} copy`, rows: def.rows });
@@ -829,24 +846,31 @@ function onAction(action, arg) {
       P.undo();
       break;
     case 'move':
+      explain(action, arg);
       P.setMove(arg);
       break;
     case 'fire':
+      explain(action, arg);
       P.setFire(arg);
       break;
     case 'addStance':
+      explain(action, arg);
       P.addAction({ type: 'stance', stance: arg });
       break;
     case 'addWait':
+      explain(action, arg);
       P.addAction({ type: 'wait', t: 1 });
       break;
     case 'addCover':
+      explain(action, arg);
       P.addAction({ type: 'cover' });
       break;
     case 'addSync':
+      explain(action, arg);
       P.addAction({ type: 'until', t: 1 });
       break;
     case 'pick':
+      explain(action, arg);
       if (P.state.pickMode === arg) P.cancelPick();
       else P.startPick(arg);
       break;
@@ -870,6 +894,12 @@ function onAction(action, arg) {
       break;
     }
   }
+}
+
+/** Show what a tapped planning control does (phones have no tooltips) for a few seconds, on this waypoint only. */
+function explain(action, arg) {
+  const P = g.planning;
+  g.explain = { text: helpFor(action, arg), at: `${P.state.selectedId}:${P.state.wpIndex}`, until: performance.now() + EXPLAIN_MS };
 }
 
 function onEditorAction(action, arg) {
@@ -967,6 +997,8 @@ function updateHud() {
 
   if (g.confirm) {
     hud.overlay(g.confirm);
+  } else if (g.help) {
+    hud.overlay(overlays.howTo(true));
   } else if (g.netMessage) {
     hud.overlay(g.netMessage);
   } else if (match.phase === 'handoff') {
@@ -1008,6 +1040,8 @@ function updateHud() {
         charges: s.charges,
         pickMode: P.state.pickMode,
         wp: w,
+        summary: describeWaypoint(w),
+        explain: g.explain?.at === `${s.id}:${P.state.wpIndex}` && performance.now() < g.explain.until ? g.explain.text : null,
       });
     } else if (s) {
       hud.panel({

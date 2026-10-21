@@ -6,6 +6,7 @@ import { throwGrenade } from '../grenades.js';
 import { ROLES } from '../roles.js';
 import { handleDoorAhead, breachableDoor, breachDoor, BREACH_TIME } from '../doors.js';
 import { Tile, tileAt, isWalkable, worldToCell, cellCenter } from '../map.js';
+import { makeNoise } from '../noise.js';
 
 export const SPEED = { walk: 1.6, run: 3.6, crouch: 0.9, engaged: 1.0 }; // m/s
 const TURN_RATE = { walk: 7, run: 5 }; // rad/s
@@ -72,6 +73,8 @@ function moveAlongPath(world, s, wp, engaged) {
     s.z += (dz / dist) * stepLen;
   }
   s.moving = true;
+  // Running is loud; walking and crouching are quiet.
+  if (s.moveMode === 'run' && !engaged) makeNoise(world, s, 'step');
 }
 
 const COVER_SEARCH = 2.5;

@@ -1,8 +1,29 @@
+import { TURN_TICKS } from '../sim/constants.js';
+
+/** Sound ghosts fade after this long without a new noise from that soldier. */
+export const HEARD_TTL = TURN_TICKS * 2;
+
+/**
+ * What each team has heard: { A: [{ id, x, z, tick, kind }], B: [...] }, newest
+ * noise per enemy soldier, carried forward from the previous frame.
+ */
+function heardMemory(world, prev) {
+  const out = {};
+  for (const team of ['A', 'B']) {
+    const byId = new Map((prev?.heard?.[team] ?? []).map((h) => [h.id, h]));
+    for (const e of world.events) {
+      if (e.type === 'noise' && e.heardBy === team) byId.set(e.id, { id: e.id, x: e.x, z: e.z, tick: world.tick, kind: e.kind });
+    }
+    out[team] = [...byId.values()].filter((h) => world.tick - h.tick <= HEARD_TTL && world.soldiers.find((s) => s.id === h.id)?.alive);
+  }
+  return out;
+}
+
 /**
  * Records a lightweight snapshot of every tick so the whole match can be
  * scrubbed and replayed without re-running the sim.
  */
-export function snapshot(world) {
+export function snapshot(world, prev = null) {
   return {
     tick: world.tick,
     soldiers: world.soldiers.map((s) => ({
@@ -31,6 +52,7 @@ export function snapshot(world) {
       return { id: g.id, kind: g.kind, x: p.x, y: p.y, z: p.z };
     }),
     events: world.events.slice(),
+    heard: heardMemory(world, prev),
   };
 }
 
@@ -41,7 +63,7 @@ export function createRecorder(world) {
     turns: [],
 
     record(w) {
-      rec.frames.push(snapshot(w));
+      rec.frames.push(snapshot(w, rec.frames[rec.frames.length - 1]));
     },
 
     startTurn(turn, plans, notes) {

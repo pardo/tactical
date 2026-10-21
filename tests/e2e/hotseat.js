@@ -50,8 +50,9 @@ async (page) => {
   // Planning clock: with a 1 s limit, planning auto-confirms.
   await page.evaluate(() => (window.__tactical.ui.planTimer = 1));
   await page.getByRole('button', { name: 'GO ▶' }).tap();
-  await page.waitForTimeout(5800);
-  s = await st();
+  // Poll (not a fixed sleep) so a busy machine doesn't fail the test; the 1 s clock leaves time to see 'planning'.
+  await page.waitForTimeout(4500);
+  for (let k = 0; k < 100 && (s = await st()).phase === 'simulating'; k++) await page.waitForTimeout(100);
   if (s.phase !== 'planning' || s.team !== 'A') fail(`turn 2 should start with Blue planning, got ${JSON.stringify(s)}`);
   await page.waitForTimeout(1600);
   if ((await st()).phase !== 'handoff') fail('planning clock did not auto-confirm Blue');
