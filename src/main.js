@@ -805,5 +805,10 @@ const roomParam = new URLSearchParams(location.search).get('room');
 if (roomParam) enterRoom(roomParam.toUpperCase(), false);
 else hud.overlay(overlays.menu());
 
+// Installable / offline in production builds (service workers need https or localhost).
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
 // Dev-only handle for headless browser tests.
 if (import.meta.env.DEV) window.__tactical = { view, get game() { return g; }, get rig() { return rig; }, ui };
