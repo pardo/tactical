@@ -6,6 +6,7 @@ import { makeWaypoint } from '../sim/plan.js';
 import { TURN_TICKS } from '../sim/constants.js';
 import { GRENADE_RANGE, GRENADE } from '../sim/grenades.js';
 import { EYE_HEIGHT, BODY_HEIGHT } from '../sim/soldier/soldier.js';
+import { doorAt, BREACH_REACH } from '../sim/doors.js';
 
 /**
  * Turn-based AI opponent. It only uses what its own team has seen (no wallhacks):
@@ -43,6 +44,33 @@ function pointAlongPath(world, s, target, d) {
     prev = p;
   }
   return prev;
+}
+
+/**
+ * First closed door on the walking route from s to dest, with a stacking point
+ * just before it (within breaching reach).
+ */
+function closedDoorOnRoute(world, s, dest) {
+  const path = findPath(world.map, s.x, s.z, dest.x, dest.z);
+  if (!path) return null;
+  let prev = { x: s.x, z: s.z };
+  const behind = [];
+  for (const p of path) {
+    const len = dist(prev, p);
+    const n = Math.max(1, Math.ceil(len / 0.25));
+    for (let k = 1; k <= n; k++) {
+      const q = { x: prev.x + ((p.x - prev.x) * k) / n, z: prev.z + ((p.z - prev.z) * k) / n };
+      const door = doorAt(world, q.x, q.z);
+      if (door && door.state === 'closed') {
+        // Walk back along the route to a point ~1.2 m from the door.
+        const stack = [...behind].reverse().find((b) => dist(b, door) >= 1.1) ?? { x: s.x, z: s.z };
+        return dist(stack, door) <= BREACH_REACH ? { door, stack } : null;
+      }
+      behind.push(q);
+    }
+    prev = p;
+  }
+  return null;
 }
 
 const ORTHO = [
@@ -253,6 +281,16 @@ export function createAI(team, seed = 1) {
           wps.push(wp);
           taken.push(spot);
           note = `${role} → ${wp.move} to ${spot.cover ? `${spot.cover} cover` : 'open ground'}, watching ${objLabel}`;
+
+          // Breachers blow closed doors on the way instead of opening them by hand.
+          const route = s.charges > 0 && role !== 'overwatch' ? closedDoorOnRoute(world, s, spot) : null;
+          if (route) {
+            const stackWp = makeWaypoint(route.stack.x, route.stack.z);
+            stackWp.actions.push({ type: 'breach', x: route.door.x, z: route.door.z });
+            wp.move = 'run';
+            wps.unshift(stackWp);
+            note += ' · breach door first';
+          }
         } else {
           note = `${role} → no spot found, holding`;
         }

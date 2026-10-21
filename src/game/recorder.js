@@ -23,6 +23,7 @@ export function snapshot(world) {
       visible: s.visible.slice(),
     })),
     smokes: world.smokes.map((sm) => ({ x: sm.x, z: sm.z, r: sm.r })),
+    doors: world.doors.map((d) => d.state),
     grenades: world.grenades.map((g) => {
       const p = g.body.translation();
       return { id: g.id, kind: g.kind, x: p.x, y: p.y, z: p.z };

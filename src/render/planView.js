@@ -60,15 +60,15 @@ export function createPlanView(scene) {
    * @param plans [{ soldierId, team, start:{x,z,stance}, waypoints, editable }]
    * @param selected { soldierId, index } | null
    */
-  function setPlans(map, plans, selected) {
-    const key = JSON.stringify([plans, selected]);
+  function setPlans(map, plans, selected, closedDoors = null) {
+    const key = JSON.stringify([plans, selected, closedDoors && [...closedDoors]]);
     if (key === builtKey) return lastEstimates;
     builtKey = key;
     clear();
     lastEstimates = new Map();
 
     for (const plan of plans) {
-      const est = estimatePlan(map, plan.start, plan.waypoints);
+      const est = estimatePlan(map, plan.start, plan.waypoints, closedDoors);
       lastEstimates.set(plan.soldierId, est);
       const teamColor = TEAM_COLORS[plan.team];
       const isSelSoldier = selected?.soldierId === plan.soldierId;
@@ -101,6 +101,14 @@ export function createPlanView(scene) {
               const arrow = new THREE.ArrowHelper(dir.normalize(), v(wp, 0.15), 1.4, 0xffffff, 0.4, 0.3);
               group.add(arrow);
             }
+          } else if (a.type === 'breach') {
+            const charge = new THREE.Mesh(
+              new THREE.RingGeometry(0.25, 0.45, 4),
+              new THREE.MeshBasicMaterial({ color: 0xff3b30, transparent: true, opacity: 0.9, depthWrite: false }),
+            );
+            charge.rotation.x = -Math.PI / 2;
+            charge.position.set(a.x, 1.2, a.z);
+            group.add(charge, line([v(wp, 0.5), v(a, 1.2)], 0xff3b30, 0.8, true));
           } else if (a.type === 'grenade') {
             const d = Math.hypot(a.x - wp.x, a.z - wp.z);
             const k = d > GRENADE_RANGE ? GRENADE_RANGE / d : 1;

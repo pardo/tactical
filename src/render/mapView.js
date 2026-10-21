@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Tile, cellCenter } from '../sim/map.js';
+import { doorAxis } from '../sim/doors.js';
 
 // Drawn lower than their physical height so the overhead camera can see into rooms.
 const WALL_VIS_HEIGHT = 1.4;
@@ -73,6 +74,26 @@ export function createMapView(scene, map) {
   doors.castShadow = false;
   group.add(doors);
 
+  // Door panels, toggled from frame state.
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x9c7445 });
+  const doorPanels = [];
+  for (let cz = 0; cz < map.height; cz++) {
+    for (let cx = 0; cx < map.width; cx++) {
+      if (map.tiles[cz * map.width + cx] !== Tile.DOOR) continue;
+      const along = doorAxis(map, cx, cz) === 'x';
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(along ? 1 : 0.16, WALL_VIS_HEIGHT * 0.95, along ? 0.16 : 1), doorMat);
+      const c = cellCenter(map, cx, cz);
+      panel.position.set(c.x, (WALL_VIS_HEIGHT * 0.95) / 2, c.z);
+      panel.castShadow = true;
+      group.add(panel);
+      doorPanels.push(panel);
+    }
+  }
+
   scene.add(group);
+  /** @param states door states from a frame ('closed' | 'open' | 'breached'), in door order */
+  group.userData.setDoors = (states) => {
+    doorPanels.forEach((p, i) => (p.visible = (states?.[i] ?? 'closed') === 'closed'));
+  };
   return group;
 }

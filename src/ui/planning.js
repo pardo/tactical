@@ -111,8 +111,10 @@ export function createPlanning(map) {
       if (!w || w.actions.length >= MAX_ACTIONS) return false;
       snapshot();
       const last = w.actions[w.actions.length - 1];
-      // Tapping "+Wait" again extends the trailing wait instead of stacking a new one.
+      // Tapping "+Wait" again extends the trailing wait instead of stacking a new one;
+      // tapping "Sync" again moves the sync time later (wrapping around the turn).
       if (action.type === 'wait' && last?.type === 'wait') last.t = Math.min(MAX_WAIT, last.t + action.t);
+      else if (action.type === 'until' && last?.type === 'until') last.t = last.t >= 5 ? 0.5 : last.t + 0.5;
       else w.actions.push(action);
       return true;
     },
@@ -166,6 +168,7 @@ export function createPlanning(map) {
         return true;
       }
       if (mode.startsWith('grenade:')) return api.addAction({ type: 'grenade', kind: mode.slice(8), x, z });
+      if (mode === 'breach') return api.addAction({ type: 'breach', x, z });
       return api.addAction({ type: mode, x, z });
     },
 

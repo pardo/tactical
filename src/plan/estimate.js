@@ -1,28 +1,51 @@
 import { findPath } from '../sim/nav.js';
+import { worldToCell } from '../sim/map.js';
 import { SPEED, ACTION_TIME } from '../sim/soldier/orders.js';
+import { DOOR_OPEN_TIME } from '../sim/doors.js';
 import { TURN_SECONDS } from '../sim/constants.js';
 
 const FACE_TIME = 0.4; // rough average turn time
 
 const dist = (a, b) => Math.sqrt((b.x - a.x) ** 2 + (b.z - a.z) ** 2);
 
-export function actionDuration(a) {
+/** Seconds an action takes when it starts at turn time t. */
+export function actionDuration(a, t = 0) {
   if (a.type === 'wait') return a.t;
+  if (a.type === 'until') return Math.max(0, a.t - t);
   if (a.type === 'face') return FACE_TIME;
   return ACTION_TIME[a.type] ?? 0;
+}
+
+/** Closed doors crossed by the segment a→b (sampled), excluding ones already counted. */
+function doorsCrossed(map, a, b, closedDoors, counted) {
+  if (!closedDoors?.size) return 0;
+  const len = Math.sqrt((b.x - a.x) ** 2 + (b.z - a.z) ** 2);
+  const n = Math.max(1, Math.ceil(len / 0.25));
+  let found = 0;
+  for (let k = 0; k <= n; k++) {
+    const { cx, cz } = worldToCell(map, a.x + ((b.x - a.x) * k) / n, a.z + ((b.z - a.z) * k) / n);
+    const key = `${cx},${cz}`;
+    if (closedDoors.has(key) && !counted.has(key)) {
+      counted.add(key);
+      found++;
+    }
+  }
+  return found;
 }
 
 /**
  * Predicts how a plan plays out if nothing interrupts it (no enemies). Used for
  * path drawing, per-waypoint ETAs and the "where am I at the end of the turn" marker.
  *
+ * @param closedDoors optional Set of "cx,cz" keys of closed doors (adds opening time)
  * @returns {{
  *   legs: { points: {x,z}[], move: string, blocked: boolean }[],
  *   marks: { arrive: number, done: number }[],
  *   atTurnEnd: {x,z} | null,   // null if the plan finishes before the turn ends
  *   end: {x,z}, total: number }}
  */
-export function estimatePlan(map, start, waypoints) {
+export function estimatePlan(map, start, waypoints, closedDoors = null) {
+  const counted = new Set();
   let pos = { x: start.x, z: start.z };
   let stance = start.stance ?? 'stand';
   let t = 0;
@@ -48,13 +71,16 @@ export function estimatePlan(map, start, waypoints) {
     if (wp.move === 'run') stance = 'stand';
     const speed = wp.move === 'run' ? SPEED.run : stance === 'crouch' ? SPEED.crouch : SPEED.walk;
     const points = [pos, ...path];
-    for (let i = 1; i < points.length; i++) span(points[i - 1], points[i], dist(points[i - 1], points[i]) / speed);
+    for (let i = 1; i < points.length; i++) {
+      const doors = doorsCrossed(map, points[i - 1], points[i], closedDoors, counted);
+      span(points[i - 1], points[i], dist(points[i - 1], points[i]) / speed + doors * DOOR_OPEN_TIME);
+    }
     legs.push({ points, move: wp.move, blocked: false });
     const arrive = t;
     pos = points[points.length - 1];
     for (const a of wp.actions) {
       if (a.type === 'stance') stance = a.stance;
-      span(pos, pos, actionDuration(a));
+      span(pos, pos, actionDuration(a, t));
     }
     marks.push({ arrive, done: t });
   }

@@ -29,6 +29,7 @@ const PICK_HINTS = {
   'grenade:frag': 'Tap the map: frag target (max 14 m)',
   'grenade:flash': 'Tap the map: flashbang target (max 14 m)',
   'grenade:smoke': 'Tap the map: smoke target (max 14 m)',
+  breach: 'Tap the door to blow (stand next to it)',
 };
 const LOG_LINES = 10;
 
@@ -173,6 +174,8 @@ function logFrame(i, frame) {
       g.log.push({ i, team: team(e.id), cls: team(e.id), text: `${ts} ${L[e.id]} throws a ${e.kind}` });
     } else if (e.type === 'blinded') {
       g.log.push({ i, team: null, cls: team(e.id), text: `${ts} ${L[e.id]} blinded ${e.duration.toFixed(1)}s` });
+    } else if (e.type === 'breach') {
+      g.log.push({ i, team: null, cls: 'kill', text: `${ts} 💥 ${L[e.id]} breaches a door` });
     } else if (e.type === 'reload') {
       g.log.push({ i, team: team(e.id), cls: team(e.id), text: `${ts} ${L[e.id]} reloading` });
     }
@@ -367,6 +370,9 @@ function onAction(action, arg) {
     case 'addWait':
       P.addAction({ type: 'wait', t: 1 });
       break;
+    case 'addSync':
+      P.addAction({ type: 'until', t: 1 });
+      break;
     case 'pick':
       if (P.state.pickMode === arg) P.cancelPick();
       else P.startPick(arg);
@@ -457,6 +463,7 @@ function updateHud() {
         count: P.state.drafts[s.id].length,
         eta: mark ? (Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : 'unreachable') : '–',
         gear: s.gear,
+        charges: s.charges,
         pickMode: P.state.pickMode,
         wp: w,
       });
@@ -520,7 +527,12 @@ function drawPlans() {
         editable: false,
       }));
   }
-  const estimates = g.plans.setPlans(match.map, plans, selected);
+  const doorFrame = editing() ? frames()[frames().length - 1] : frames()[g.recorder.turnAt(g.cursor)?.frame ?? 0];
+  const closedDoors = new Set();
+  match.world.doors.forEach((d, i) => {
+    if ((doorFrame.doors?.[i] ?? 'closed') === 'closed') closedDoors.add(`${d.cx},${d.cz}`);
+  });
+  const estimates = g.plans.setPlans(match.map, plans, selected, closedDoors);
   g.plans.update(rig.state.distance);
 
   // ETA labels for the selected soldier while planning.
@@ -580,6 +592,7 @@ startLoop({
       g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones });
       g.fx.drawGrenades(prev, curr, a);
       g.fx.drawSmokes(curr);
+      g.mapView.userData.setDoors(curr.doors);
       g.fx.update(dt);
       drawPlans();
       updateHud();

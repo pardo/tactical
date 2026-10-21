@@ -11,11 +11,14 @@
  *     actions: [ { type: 'stance', stance: 'stand' | 'crouch' }
  *              | { type: 'face', x, z }
  *              | { type: 'wait', t }  // seconds
+ *              | { type: 'until', t } // hold until t seconds into the turn (team sync)
+ *              | { type: 'breach', x, z } // blow the closed door nearest (x, z)
  *              | { type: 'grenade', kind: 'frag' | 'flash' | 'smoke', x, z } ] }
  */
 export const MAX_WAYPOINTS = 16;
 export const MAX_ACTIONS = 6;
 export const MAX_WAIT = 10;
+const TURN_LENGTH = 5;
 export const MOVE_MODES = ['walk', 'run'];
 export const FIRE_MODES = ['onSight', 'hold'];
 export const STANCES = ['stand', 'crouch'];
@@ -55,6 +58,10 @@ export function sanitizeWaypoints(map, waypoints) {
             return { type: 'grenade', kind: oneOf(a.kind, GRENADE_KINDS), x: cx(a.x), z: cz(a.z) };
           case 'wait':
             return { type: 'wait', t: Math.min(MAX_WAIT, Math.max(0, finite(a.t, 1))) };
+          case 'until':
+            return { type: 'until', t: Math.min(TURN_LENGTH, Math.max(0, finite(a.t, 1))) };
+          case 'breach':
+            return { type: 'breach', x: cx(a.x), z: cz(a.z) };
           default:
             return null;
         }

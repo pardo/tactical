@@ -27,7 +27,7 @@ export function createFxView(scene) {
 
   function explosion(e) {
     if (e.kind === 'smoke') return; // drawn from frame state instead (it lingers)
-    const color = e.kind === 'flash' ? 0xffffff : 0xffa040;
+    const color = e.kind === 'flash' || e.kind === 'breach' ? 0xffffff : 0xffa040;
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false });
     const ball = new THREE.Mesh(blastGeo, mat);
     ball.position.set(e.x, Math.max(e.y, 0.3), e.z);
@@ -56,6 +56,7 @@ export function createFxView(scene) {
       for (const e of frame.events) {
         if (e.type === 'shot') tracer(e);
         else if (e.type === 'explosion') explosion(e);
+        else if (e.type === 'breach') explosion({ ...e, kind: 'breach', y: 1, radius: 2.5 });
       }
     },
 

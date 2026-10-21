@@ -10,6 +10,7 @@ import { updateGrenades } from './grenades.js';
 import { sanitizeWaypoints } from './plan.js';
 import { PI } from './fmath.js';
 import { DEFAULT_SQUAD, sanitizeSquad } from './roles.js';
+import { createDoors } from './doors.js';
 
 // Physical heights, used for line of sight. The renderer draws walls shorter for readability.
 export const WALL_HEIGHT = 2.4;
@@ -24,10 +25,13 @@ export function createWorld(seed, map) {
   const physics = createPhysicsWorld();
   physics.createCollider(RAPIER.ColliderDesc.cuboid(map.width / 2, 0.1, map.height / 2).setTranslation(0, -0.1, 0));
   addMapColliders(physics, map);
+  const doors = createDoors(physics, map);
   // Build the query structures so line-of-sight works before the first tick.
   physics.step();
   return {
     tick: 0,
+    turnStart: 0,
+    doors,
     rng: createRng(seed),
     physics,
     map,
@@ -94,6 +98,11 @@ export function applyPlans(world, team, plans) {
   }
 }
 
+/** Mark the start of a 5 s turn (for 'until' actions). Called once per turn by the match, for both teams. */
+export function beginTurnClock(world) {
+  world.turnStart = world.tick;
+}
+
 export function step(world) {
   world.events = [];
   if (world.winner) return;
@@ -140,5 +149,7 @@ export function hashWorld(world) {
     h.num(g.id).str(g.kind).num(g.fuse).num(p.x).num(p.y).num(p.z).num(v.x).num(v.y).num(v.z);
   }
   for (const s of world.smokes) h.num(s.x).num(s.z).num(s.r).num(s.until);
+  h.num(world.turnStart);
+  for (const d of world.doors) h.num(d.id).str(d.state);
   return h.digest();
 }

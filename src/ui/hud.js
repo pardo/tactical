@@ -17,6 +17,8 @@ export function actionLabel(a) {
   if (a.type === 'stance') return ICON.stance[a.stance];
   if (a.type === 'wait') return `${ICON.wait} ${a.t}s`;
   if (a.type === 'grenade') return `${GRENADE_ICON[a.kind]} ${GRENADE_NAME[a.kind]}`;
+  if (a.type === 'until') return `⏲ @${a.t}s`;
+  if (a.type === 'breach') return '🧨 Breach';
   return ICON[a.type] ?? a.type;
 }
 
@@ -182,6 +184,8 @@ export function createHud(root, onAction) {
            ${btn('addStance', '▼ Crouch', { arg: 'crouch' })}${btn('addStance', '▲ Stand', { arg: 'stand' })}
            ${btn('pick', '➜ Face…', { arg: 'face', cls: model.pickMode === 'face' ? 'on' : '' })}
            ${btn('addWait', '⏱ +1s')}
+           ${btn('addSync', '⏲ Sync', { title: 'Hold until a moment of the turn (tap again: +0.5s)' })}
+           ${model.charges > 0 ? btn('pick', `🧨 Breach ×${model.charges}…`, { arg: 'breach', cls: model.pickMode === 'breach' ? 'on' : '' }) : ''}
            ${['frag', 'flash', 'smoke']
              .filter((k) => model.gear[k] > 0)
              .map((k) => btn('pick', `${GRENADE_ICON[k]} ${GRENADE_NAME[k]} ×${model.gear[k]}…`, { arg: `grenade:${k}`, cls: model.pickMode === `grenade:${k}` ? 'on' : '' }))

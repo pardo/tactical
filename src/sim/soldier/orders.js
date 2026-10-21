@@ -1,15 +1,16 @@
-import { DT } from '../constants.js';
+import { DT, TICK_RATE } from '../constants.js';
 import { headingTo, wrapAngle, length, PI } from '../fmath.js';
 import { findPath } from '../nav.js';
 import { turnToward } from './soldier.js';
 import { throwGrenade } from '../grenades.js';
 import { ROLES } from '../roles.js';
+import { handleDoorAhead, breachableDoor, breachDoor, BREACH_TIME } from '../doors.js';
 
 export const SPEED = { walk: 1.6, run: 3.6, crouch: 0.9, engaged: 1.0 }; // m/s
 const TURN_RATE = { walk: 7, run: 5 }; // rad/s
 const SHARP_TURN = PI / 3;
 const FACE_TOLERANCE = (3 * PI) / 180;
-export const ACTION_TIME = { stance: 0.3, grenade: 0.5 };
+export const ACTION_TIME = { stance: 0.3, grenade: 0.5, breach: BREACH_TIME };
 
 function advance(s) {
   s.orders.shift();
@@ -28,7 +29,7 @@ function speedFor(s, engaged) {
   return base * ROLES[s.role].speed * (1 - 0.35 * s.suppression) * (s.blind > 0 ? 0.4 : 1);
 }
 
-function moveAlongPath(s, wp, engaged) {
+function moveAlongPath(world, s, wp, engaged) {
   const target = s.path[0];
   const dx = target.x - s.x;
   const dz = target.z - s.z;
@@ -38,6 +39,12 @@ function moveAlongPath(s, wp, engaged) {
     return;
   }
   const travel = headingTo(dx, dz);
+  // Look half a metre ahead: a closed door there must be opened first.
+  const look = Math.min(dist, 0.5);
+  if (handleDoorAhead(world, s, s.x + (dx / dist) * look, s.z + (dz / dist) * look)) {
+    if (!engaged) turnToward(s, travel, TURN_RATE.walk);
+    return;
+  }
   let factor = 1;
   if (!engaged) {
     if (wp.look) {
@@ -75,6 +82,20 @@ function runAction(world, s, a, engaged) {
     case 'wait':
       s.actionTimer += DT;
       return s.actionTimer >= a.t;
+    case 'until':
+      // Synchronise with the team: hold until this many seconds into the turn.
+      return (world.tick - world.turnStart) / TICK_RATE >= a.t;
+    case 'breach': {
+      if (s.charges <= 0) return true;
+      const door = breachableDoor(world, s, a.x, a.z);
+      if (!door) return true;
+      if (engaged || s.blind > 0) return false;
+      turnToward(s, headingTo(door.x - s.x, door.z - s.z), TURN_RATE.walk);
+      s.actionTimer += DT;
+      if (s.actionTimer < BREACH_TIME) return false;
+      breachDoor(world, s, door);
+      return true;
+    }
     case 'grenade':
       if ((s.gear[a.kind] ?? 0) <= 0) return true;
       if (engaged || s.blind > 0) return false;
@@ -102,7 +123,7 @@ export function updateOrders(world, s, engaged) {
       s.fire = wp.fire;
       if (wp.move === 'run') s.stance = 'stand';
     }
-    if (s.path.length) moveAlongPath(s, wp, engaged);
+    if (s.path.length) moveAlongPath(world, s, wp, engaged);
     if (!s.path.length) s.arrived = true;
     return;
   }

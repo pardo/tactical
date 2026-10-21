@@ -1,5 +1,5 @@
 import { parseMap } from '../sim/map.js';
-import { createWorld, spawnSquads, applyPlans, step, TEAMS } from '../sim/world.js';
+import { createWorld, spawnSquads, applyPlans, step, beginTurnClock, TEAMS } from '../sim/world.js';
 import { cloneWaypoints } from '../sim/plan.js';
 import { TURN_TICKS } from '../sim/constants.js';
 import { createAI } from '../ai/planner.js';
@@ -94,6 +94,7 @@ export function createMatch({ mode, mapDef, seed, squads = {} }) {
 
     startSim() {
       for (const t of TEAMS) applyPlans(world, t, m.drafts[t]);
+      beginTurnClock(world);
       m.phase = 'simulating';
       m.planningTeam = null;
       m.turnTick = 0;

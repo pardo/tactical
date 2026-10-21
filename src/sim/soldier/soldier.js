@@ -36,6 +36,7 @@ export function createSoldier(world, { team, x, z, heading = 0, role = 'rifleman
     arrived: false,
     actionIdx: 0,
     actionTimer: 0,
+    doorTimer: 0,
     moveMode: 'walk',
     fire: 'onSight',
     moving: false,
