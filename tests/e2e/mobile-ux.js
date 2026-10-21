@@ -18,6 +18,10 @@ async (page) => {
     return c.scrollWidth <= c.clientWidth && document.querySelector('#bottom .bar .go').getBoundingClientRect().right <= innerWidth;
   });
   if (!chipsFit) fail('soldier chips or GO button do not fit');
+  // A very long status line must not push the top buttons off-screen.
+  await page.evaluate(() => window.__tactical.ui && (document.querySelector('#top .status').textContent = 'Replay · turn 12 · 4.9s · a very long status line\nBlue 4 · Red 4 · zone 12–19/20s'));
+  const quitVisible = await page.evaluate(() => document.querySelector('[data-action=quit]').getBoundingClientRect().right <= innerWidth);
+  if (!quitVisible) fail('long status pushes the top buttons off-screen');
   const cam = () => page.evaluate(() => ({ ...window.__tactical.rig.state }));
   const c0 = await cam();
   if (!(c0.x < -1)) fail(`camera not framed on Blue's side (x=${c0.x.toFixed(1)})`);

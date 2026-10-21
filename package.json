@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "e2e": "sh tests/e2e/run.sh"
+    "e2e": "sh tests/e2e/run.sh",
+    "check": "eslint . && vitest run && vite build"
   },
   "dependencies": {
     "@dimforge/rapier3d-deterministic-compat": "^0.21.0",
