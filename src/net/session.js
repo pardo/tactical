@@ -86,6 +86,7 @@ export function createSession({ transport, isHost, onEvent }) {
           squads: { A: sanitizeSquad(msg.squads?.A), B: sanitizeSquad(msg.squads?.B) },
           map: String(msg.map ?? ''),
           mode: String(msg.mode ?? ''),
+          timer: Math.max(0, Math.min(600, Number(msg.timer) || 0)),
           localTeam,
         });
       case 'commit': {
@@ -133,10 +134,10 @@ export function createSession({ transport, isHost, onEvent }) {
       return peer;
     },
 
-    /** @param opts host only: { map, mode } sent to the guest with `start` */
+    /** @param opts host only: { map, mode, timer } sent to the guest with `start` */
     ready(squad, opts = {}) {
       localSquad = sanitizeSquad(squad);
-      options = { map: opts.map, mode: opts.mode };
+      options = { map: opts.map, mode: opts.mode, timer: opts.timer };
       if (peer) transport.send({ t: 'ready', v: PROTOCOL_VERSION, squad: localSquad });
       maybeStart();
     },

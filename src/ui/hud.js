@@ -75,6 +75,9 @@ export function createHud(root, onAction) {
 
     status(text) {
       if (els.status.textContent !== text) els.status.textContent = text;
+      // Last 10 seconds of the planning clock in red.
+      const m = /⏱ (\d+)s/.exec(text);
+      els.status.classList.toggle('urgent', !!m && Number(m[1]) <= 10);
     },
 
     hint(text) {
@@ -208,8 +211,8 @@ export function createHud(root, onAction) {
   };
 }
 
-const settingsRows = ({ mapName, modeName, modeHelp }) => `
-  <div class="setting">${btn('cycleMap', `🗺 ${esc(mapName)} ▸`)}${btn('cycleMode', `🎯 ${esc(modeName)} ▸`)}</div>
+const settingsRows = ({ mapName, modeName, modeHelp, timer }) => `
+  <div class="setting">${btn('cycleMap', `🗺 ${esc(mapName)} ▸`)}${btn('cycleMode', `🎯 ${esc(modeName)} ▸`)}${btn('cycleTimer', `⏱ ${timer ? `${timer}s to plan` : 'No time limit'} ▸`)}</div>
   <p class="small">${esc(modeHelp)}</p>`;
 
 const ROLE_HELP = [

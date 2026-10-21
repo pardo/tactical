@@ -70,12 +70,15 @@ const ui = {
   squads: { A: [...DEFAULT_SQUAD], B: [...DEFAULT_SQUAD] },
   mapId: DEFAULT_MAP,
   gameMode: 'elimination',
+  planTimer: 0, // seconds per planning phase, 0 = unlimited
 };
+const TIMER_OPTIONS = [0, 45, 90, 120];
 
 const settings = () => ({
   mapName: MAPS[ui.mapId].name,
   modeName: MODES[ui.gameMode].label,
   modeHelp: MODES[ui.gameMode].help,
+  timer: ui.planTimer,
 });
 const cycle = (list, v) => list[(list.indexOf(v) + 1) % list.length];
 
@@ -117,6 +120,8 @@ function lobbyOverlay() {
 
 function enterRoom(code, isHost) {
   leaveRoom();
+  // Online games default to a planning clock so nobody can stall.
+  if (!ui.planTimer) ui.planTimer = 90;
   let transport;
   try {
     transport = createTrysteroTransport(code);
@@ -171,6 +176,7 @@ function onNetEvent(e) {
       g?.log.push({ i: g.cursor, team: null, cls: 'note', text: `Rejoined at turn ${g.match.turn}` });
       break;
     case 'start':
+      if (!net.isHost) ui.planTimer = e.timer ?? 0;
       startMatch('online', {
         seed: e.seed,
         squads: e.squads,
@@ -209,7 +215,7 @@ function startMatch(mode, opts = {}) {
   const half = Math.max(map.width, map.height) / 2;
   view.setShadowBounds(half + 2);
   // Start framed on your own squad (spectators: whole map), looking toward the enemy.
-  const own = match.viewerTeam;
+  const own = mode === 'hotseat' ? 'A' : match.viewerTeam;
   const mine = own ? match.world.soldiers.filter((s) => s.team === own) : [];
   const focus = mine.length
     ? { x: mine.reduce((a, s) => a + s.x, 0) / mine.length / 2, z: mine.reduce((a, s) => a + s.z, 0) / mine.length / 2 }
@@ -232,6 +238,7 @@ function startMatch(mode, opts = {}) {
     plans: createPlanView(view.scene),
     fx: createFxView(view.scene),
     planning: createPlanning(map),
+    planDeadline: null,
     cursor: 0,
     budget: 0,
     turnEndWait: 0,
@@ -324,6 +331,14 @@ const atLive = () => g.cursor >= frames().length - 1;
 const editing = () => g && g.match.phase === 'planning' && atLive();
 const soldierOf = (id) => g.match.world.soldiers.find((s) => s.id === id);
 
+/** Point the camera at a team's living soldiers, facing the enemy side. */
+function frameTeam(team) {
+  const mine = g.match.world.soldiers.filter((s) => s.team === team && s.alive);
+  if (!mine.length) return;
+  rig.state.yaw = team === 'B' ? Math.PI : 0;
+  rig.focusOn(mine.reduce((a, s) => a + s.x, 0) / mine.length, mine.reduce((a, s) => a + s.z, 0) / mine.length);
+}
+
 function nextTurn() {
   g.turnEndWait = 0;
   g.match.beginTurn();
@@ -334,6 +349,8 @@ function onPhase() {
   const { match } = g;
   if (match.phase === 'planning') {
     g.planning.begin(match.planningTeam, match.drafts[match.planningTeam], () => match.world.soldiers);
+    g.planDeadline = ui.planTimer && g.mode !== 'replay' ? performance.now() + ui.planTimer * 1000 : null;
+    if (g.mode === 'hotseat') frameTeam(match.planningTeam);
   } else if (match.phase === 'simulating') {
     const notes = { ...match.aiNotes.A, ...match.aiNotes.B };
     g.recorder.startTurn(match.turn, match.drafts, notes);
@@ -512,6 +529,9 @@ function onAction(action, arg) {
     case 'cycleMode':
       ui.gameMode = cycle(MODE_IDS, ui.gameMode);
       return hud.overlay(net ? lobbyOverlay() : squadOverlay(ui.pendingMode));
+    case 'cycleTimer':
+      ui.planTimer = cycle(TIMER_OPTIONS, ui.planTimer);
+      return hud.overlay(net ? lobbyOverlay() : squadOverlay(ui.pendingMode));
     case 'cycleRole': {
       const [team, i] = arg.split(':');
       ui.squads[team] = cycleRole(ui.squads[team], Number(i));
@@ -558,7 +578,7 @@ function onAction(action, arg) {
     case 'onlineReady':
       if (!net) return;
       net.ready = true;
-      net.session.ready(ui.squads[net.isHost ? 'A' : 'B'], { map: ui.mapId, mode: ui.gameMode });
+      net.session.ready(ui.squads[net.isHost ? 'A' : 'B'], { map: ui.mapId, mode: ui.gameMode, timer: ui.planTimer });
       if (!g) hud.overlay(lobbyOverlay());
       return;
     case 'fullscreen':
@@ -617,6 +637,7 @@ function onAction(action, arg) {
       break;
     case 'acceptHandoff':
       g.match.acceptHandoff();
+      onPhase(); // set up planning (and the clock) for the second player
       break;
     case 'saveReplay':
       downloadReplay();
@@ -706,7 +727,10 @@ function updateHud() {
   if (match.phase === 'over' && live) {
     status = match.world.winner === 'draw' ? 'Draw' : `${TEAM_NAMES[match.world.winner]} wins`;
   } else if (!live) status = `Replay · turn ${turn} · ${sec.toFixed(1)}s`;
-  else if (match.phase === 'planning') status = `Turn ${match.turn} · ${TEAM_NAMES[match.planningTeam]} planning`;
+  else if (match.phase === 'planning') {
+    const left = g.planDeadline ? Math.max(0, Math.ceil((g.planDeadline - performance.now()) / 1000)) : null;
+    status = `Turn ${match.turn} · ${TEAM_NAMES[match.planningTeam]} planning${left !== null ? ` · ⏱ ${left}s` : ''}`;
+  }
   else if (match.phase === 'handoff') status = `Turn ${match.turn} · handoff`;
   else if (match.phase === 'waiting') status = `Turn ${match.turn} · waiting for opponent…`;
   else status = `Turn ${match.turn} · ${(g.match.turnTick / TICK_RATE).toFixed(1)}s / ${(TURN_TICKS / TICK_RATE).toFixed(0)}s`;
@@ -875,6 +899,12 @@ startLoop({
     if (net && g.mode === 'online' && (g.match.phase === 'turnEnd' || g.match.phase === 'over') && !net.sentState.has(g.match.turn)) {
       net.sentState.add(g.match.turn);
       net.session.sendState(g.match.turn, hashWorld(g.match.world));
+    }
+    // Planning clock ran out: go with whatever is planned.
+    if (g.planDeadline && g.match.phase === 'planning' && performance.now() > g.planDeadline) {
+      g.planDeadline = null;
+      if (!atLive()) jumpTo(frames().length - 1);
+      onAction('go');
     }
     if (g.match.phase === 'turnEnd' && atLive()) {
       if (g.mode !== 'aiVsAi') nextTurn();

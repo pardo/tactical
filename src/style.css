@@ -208,6 +208,8 @@ button.danger { color: #ff7a6b; }
 .t-A { color: var(--blue); }
 .t-B { color: var(--red); }
 .setting { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.setting button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+#top .status.urgent { color: #ff7a6b; }
 .card.howto { text-align: left; }
 .card.howto h2 { text-align: center; }
 .card.howto h3 { margin: 6px 0 0; font-size: 15px; }
