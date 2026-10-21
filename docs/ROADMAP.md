@@ -200,7 +200,7 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 - [x] Low-poly soldier models (procedural, no GLTF) with walk, crouch and death animation
 - [x] Tracers, explosions, flash bursts, smoke clouds (no muzzle flash/decals yet)
 - [x] Audio: synthesised positional gunshots/explosions/doors/reloads (no footsteps or voice barks)
-- [ ] Replay camera follow + slow-mo kill cam
+- [x] Camera follow (tap a soldier while watching); no slow-mo kill cam
 - [x] Full-match replay export/import (plans + seed = tiny file)
 - [x] How-to-play screen (no interactive tutorial)
 - [ ] UI polish, keybinds, settings, accessibility (colorblind team colors)
@@ -212,7 +212,7 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 - [ ] Squad progression / loadout customization / cosmetics
 - [ ] Spectator mode (late-joining peers receive plans only)
 - [x] Installable PWA (manifest, offline cache)
-- [ ] Deploy: static hosting (GitHub Pages / Netlify / Cloudflare Pages)
+- [x] Deploy: static build + GitHub Pages workflow (needs a GitHub repo to run)
 
 ---
 

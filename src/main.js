@@ -1152,6 +1152,12 @@ startLoop({
       const moving = !ui.paused && g.match.phase === 'simulating' || !atLive();
       const a = moving && !ui.paused ? alpha : 1;
       const selectedId = editing() ? g.planning.state.selectedId : g.watchSelected;
+      // Watching: the tapped soldier is followed by the camera (tap again to release).
+      if (!editing() && g.watchSelected !== null) {
+        const s = curr.soldiers.find((x) => x.id === g.watchSelected);
+        const visible = s && (!g.match.viewerTeam || s.team === g.match.viewerTeam || frameVisionSet(curr, g.match.viewerTeam).has(s.id));
+        if (s?.alive && visible) rig.focusOn(s.x, s.z);
+      }
       g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones, playing: moving && !ui.paused, dt });
       g.fx.drawGrenades(prev, curr, a);
       g.fx.drawSmokes(curr);

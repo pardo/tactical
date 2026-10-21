@@ -34,6 +34,12 @@ npm run e2e      # browser tests on a phone-sized page (needs `npm run dev` and 
 npm run build    # static site in dist/
 ```
 
+## Deploy
+
+It's a static site: `npm run build` and host `dist/` anywhere (https is needed for the
+installable app / offline mode). Pushing to GitHub with Pages set to "GitHub Actions" deploys
+automatically via `.github/workflows/deploy.yml`.
+
 ## Architecture
 
 - `src/sim/` deterministic simulation (fixed 60 Hz, seeded RNG, own trig, Rapier deterministic
