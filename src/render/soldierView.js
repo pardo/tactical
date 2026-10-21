@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { FOV } from '../sim/soldier/perception.js';
 import { MAX_HP } from '../sim/soldier/soldier.js';
 import { frameVision } from '../game/recorder.js';
+import { createSoldierModel } from './soldierModel.js';
 
 export const TEAM_COLORS = { A: 0x4a90e2, B: 0xe2574a };
-const DEAD_COLOR = 0x555a60;
 const CONE_RADIUS = 6;
 
 function lerpAngle(a, b, t) {
@@ -40,8 +40,6 @@ function textSprite(text, color) {
  */
 export function createSoldierView(scene, labels) {
   const views = new Map();
-  const bodyGeo = new THREE.CapsuleGeometry(0.28, 0.9, 4, 12);
-  const gunGeo = new THREE.BoxGeometry(0.08, 0.08, 0.6);
   const ringGeo = new THREE.RingGeometry(0.42, 0.52, 32);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd34d, depthWrite: false });
   const coneGeo = new THREE.CircleGeometry(CONE_RADIUS, 24, Math.PI / 2 - FOV / 2, FOV);
@@ -51,15 +49,8 @@ export function createSoldierView(scene, labels) {
   function create(s) {
     const color = TEAM_COLORS[s.team];
     const root = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.73;
-    body.castShadow = true;
-    const gun = new THREE.Mesh(gunGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
-    gun.position.set(0.12, 1.05, 0.38);
-    gun.castShadow = true;
-    const figure = new THREE.Group();
-    figure.add(body, gun);
+    const model = createSoldierModel(color, s.role);
+    const figure = model.figure;
 
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
@@ -105,14 +96,14 @@ export function createSoldierView(scene, labels) {
     ghost.visible = false;
 
     scene.add(root, overlay, ghost);
-    return { root, figure, bodyMat, ring, cone, status, overlay, hpBar, ghost, lastSeen: null };
+    return { root, figure, model, ring, cone, status, overlay, hpBar, ghost, lastSeen: null, fall: 0 };
   }
 
   /**
    * @param prev,curr frames to interpolate between
    * @param opts { viewerTeam: 'A'|'B'|null, selectedId, showCones }
    */
-  function draw(prev, curr, alpha, { viewerTeam = null, selectedId = null, showCones = false } = {}) {
+  function draw(prev, curr, alpha, { viewerTeam = null, selectedId = null, showCones = false, playing = true, dt = 0 } = {}) {
     const vision = viewerTeam ? frameVision(curr, viewerTeam) : null;
     const prevById = new Map(prev.soldiers.map((s) => [s.id, s]));
     for (const s of curr.soldiers) {
@@ -132,18 +123,13 @@ export function createSoldierView(scene, labels) {
       v.root.rotation.y = lerpAngle(p.h, s.h, alpha);
       v.overlay.position.set(x, s.stance === 'crouch' ? -0.45 : 0, z);
 
+      // Topple over ~0.35 s while playing; when scrubbing, the dead are simply down.
       if (!s.alive) {
-        v.figure.rotation.x = Math.PI / 2;
-        v.figure.position.y = 0.3;
-        v.figure.scale.y = 1;
-        v.bodyMat.color.setHex(DEAD_COLOR);
+        v.fall = playing ? Math.min(1, v.fall + dt / 0.35) : 1;
         v.overlay.visible = false;
-      } else {
-        v.figure.rotation.x = 0;
-        v.figure.position.y = 0;
-        v.figure.scale.y = s.stance === 'crouch' ? 0.65 : 1;
-        v.bodyMat.color.setHex(TEAM_COLORS[s.team]);
-      }
+      } else v.fall = 0;
+      // Walk cycle from the sim clock, so replays animate identically.
+      v.model.setPose({ stance: s.stance, moving: s.moving, walkPhase: (curr.tick / 60) * 9 + s.id, dead: !s.alive, fall: v.fall });
       v.ring.visible = s.alive && s.id === selectedId;
       v.cone.visible = s.alive && (showCones || s.id === selectedId);
 

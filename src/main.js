@@ -1123,7 +1123,7 @@ startLoop({
       const moving = !ui.paused && g.match.phase === 'simulating' || !atLive();
       const a = moving && !ui.paused ? alpha : 1;
       const selectedId = editing() ? g.planning.state.selectedId : g.watchSelected;
-      g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones });
+      g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones, playing: moving && !ui.paused, dt });
       g.fx.drawGrenades(prev, curr, a);
       g.fx.drawSmokes(curr);
       g.mapView.userData.setDoors(curr.doors);

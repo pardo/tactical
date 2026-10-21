@@ -12,6 +12,35 @@ export function createFxView(scene, mapSize = { width: 0, height: 0 }) {
   const grenadeMat = new THREE.MeshStandardMaterial({ color: 0x2f3b23 });
   const blastGeo = new THREE.SphereGeometry(1, 20, 14);
 
+  const flashMat = new THREE.MeshBasicMaterial({ color: 0xffe28a, transparent: true, depthWrite: false });
+  const puffMat = new THREE.MeshBasicMaterial({ color: 0xb9b2a4, transparent: true, depthWrite: false });
+
+  /** Muzzle flash at the shooter, and a dust puff where a miss lands. */
+  function shotFx(e) {
+    const dx = e.tx - e.x;
+    const dz = e.tz - e.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const flash = new THREE.Mesh(blastGeo, flashMat.clone());
+    flash.position.set(e.x + (dx / len) * 0.8, e.y + 0.05, e.z + (dz / len) * 0.8);
+    flash.scale.setScalar(0.12);
+    group.add(flash);
+    live.push({ obj: flash, sharedGeometry: true, age: 0, life: 0.06, update: (t) => (flash.material.opacity = 1 - t) });
+    if (e.hit) return;
+    const puff = new THREE.Mesh(blastGeo, puffMat.clone());
+    puff.position.set(e.tx, Math.max(0.1, e.ty - 0.4), e.tz);
+    group.add(puff);
+    live.push({
+      obj: puff,
+      sharedGeometry: true,
+      age: 0,
+      life: 0.35,
+      update: (t) => {
+        puff.scale.setScalar(0.08 + t * 0.25);
+        puff.material.opacity = 0.7 * (1 - t);
+      },
+    });
+  }
+
   function tracer(e) {
     const geo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(e.x, e.y, e.z),
@@ -80,7 +109,10 @@ export function createFxView(scene, mapSize = { width: 0, height: 0 }) {
     /** Spawn effects for a frame's events (only when playing forward, not when scrubbing). */
     play(frame) {
       for (const e of frame.events) {
-        if (e.type === 'shot') tracer(e);
+        if (e.type === 'shot') {
+          tracer(e);
+          shotFx(e);
+        }
         else if (e.type === 'explosion') explosion(e);
         else if (e.type === 'breach') explosion({ ...e, kind: 'breach', y: 1, radius: 2.5 });
         else if (e.type === 'coverDestroyed') debris(e);
