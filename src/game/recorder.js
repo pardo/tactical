@@ -24,6 +24,7 @@ export function snapshot(world) {
     })),
     smokes: world.smokes.map((sm) => ({ x: sm.x, z: sm.z, r: sm.r })),
     doors: world.doors.map((d) => d.state),
+    destroyed: world.destroyed.length, // count; indexes are in world.destroyed (append-only)
     objective: world.objective && { score: { ...world.objective.score }, holder: world.objective.holder },
     grenades: world.grenades.map((g) => {
       const p = g.body.translation();

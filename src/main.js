@@ -250,7 +250,7 @@ function startMatch(mode, opts = {}) {
     mapView: createMapView(view.scene, map, match.world.objective),
     soldiers: createSoldierView(view.scene, match.labels),
     plans: createPlanView(view.scene),
-    fx: createFxView(view.scene),
+    fx: createFxView(view.scene, map),
     planning: createPlanning(map),
     planDeadline: null,
     cursor: 0,
@@ -1120,6 +1120,7 @@ startLoop({
       g.fx.drawGrenades(prev, curr, a);
       g.fx.drawSmokes(curr);
       g.mapView.userData.setDoors(curr.doors);
+      g.mapView.userData.setDestroyed(g.match.world.destroyed.slice(0, curr.destroyed ?? 0));
       g.mapView.userData.setZone(curr.objective?.holder);
       g.fx.update(dt);
       drawPlans();

@@ -25,7 +25,7 @@ export const TEAMS = ['A', 'B'];
 export function createWorld(seed, map, mode = 'elimination') {
   const physics = createPhysicsWorld();
   physics.createCollider(RAPIER.ColliderDesc.cuboid(map.width / 2, 0.1, map.height / 2).setTranslation(0, -0.1, 0));
-  addMapColliders(physics, map);
+  const coverColliders = addMapColliders(physics, map);
   const doors = createDoors(physics, map);
   // Build the query structures so line-of-sight works before the first tick.
   physics.step();
@@ -33,6 +33,8 @@ export function createWorld(seed, map, mode = 'elimination') {
     tick: 0,
     turnStart: 0,
     doors,
+    coverColliders, // cell index → collider, so single cover tiles can be destroyed
+    destroyed: [], // cell indexes of destroyed cover, in destruction order
     rng: createRng(seed),
     physics,
     map,
@@ -46,14 +48,25 @@ export function createWorld(seed, map, mode = 'elimination') {
   };
 }
 
-/** One cuboid per horizontal run of identical tiles keeps the collider count low. */
+/**
+ * Walls: one cuboid per horizontal run (keeps the collider count low).
+ * Low cover: one cuboid per tile, because it can be destroyed.
+ * @returns Map of cell index → cover collider
+ */
 function addMapColliders(physics, map) {
-  const heights = { [Tile.WALL]: WALL_HEIGHT, [Tile.LOW_COVER]: LOW_COVER_HEIGHT };
+  const cover = new Map();
   for (let cz = 0; cz < map.height; cz++) {
     let cx = 0;
     while (cx < map.width) {
       const t = map.tiles[cz * map.width + cx];
-      const h = heights[t];
+      if (t === Tile.LOW_COVER) {
+        const c = cellCenter(map, cx, cz);
+        const desc = RAPIER.ColliderDesc.cuboid(0.5, LOW_COVER_HEIGHT / 2, 0.5).setTranslation(c.x, LOW_COVER_HEIGHT / 2, c.z);
+        cover.set(cz * map.width + cx, physics.createCollider(desc));
+        cx++;
+        continue;
+      }
+      const h = t === Tile.WALL ? WALL_HEIGHT : undefined;
       if (h === undefined) {
         cx++;
         continue;
@@ -68,7 +81,9 @@ function addMapColliders(physics, map) {
       cx = end + 1;
     }
   }
+  return cover;
 }
+
 
 /** @param squads { A: roleId[], B: roleId[] } */
 export function spawnSquads(world, squads = { A: DEFAULT_SQUAD, B: DEFAULT_SQUAD }) {
@@ -156,6 +171,7 @@ export function hashWorld(world) {
   }
   for (const s of world.smokes) h.num(s.x).num(s.z).num(s.r).num(s.until);
   h.num(world.turnStart);
+  for (const i of world.destroyed) h.num(i);
   if (world.objective) hashValue(h, world.objective);
   for (const d of world.doors) h.num(d.id).str(d.state);
   return h.digest();

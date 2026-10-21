@@ -55,15 +55,15 @@ export function createMapView(scene, map, objective = null) {
       WALL_VIS_HEIGHT / 2,
     ),
   );
-  group.add(
-    instanced(
-      new THREE.BoxGeometry(0.9, COVER_VIS_HEIGHT, 0.9),
-      new THREE.MeshStandardMaterial({ color: 0x6b5a3e }),
-      byTile[Tile.LOW_COVER],
-      map,
-      COVER_VIS_HEIGHT / 2,
-    ),
+  const coverCells = byTile[Tile.LOW_COVER];
+  const coverMesh = instanced(
+    new THREE.BoxGeometry(0.9, COVER_VIS_HEIGHT, 0.9),
+    new THREE.MeshStandardMaterial({ color: 0x6b5a3e }),
+    coverCells,
+    map,
+    COVER_VIS_HEIGHT / 2,
   );
+  group.add(coverMesh);
   const doors = instanced(
     new THREE.BoxGeometry(1, 0.02, 1),
     new THREE.MeshStandardMaterial({ color: 0x8c6a3f }),
@@ -115,6 +115,24 @@ export function createMapView(scene, map, objective = null) {
     zone.fill.material.color.setHex(c);
     zone.ring.material.color.setHex(c);
     zone.fill.material.opacity = holder ? 0.18 : 0.08;
+  };
+
+  // Destroyed cover: collapse those instances. `destroyed` is the cell-index list (replay-safe:
+  // scrubbing back passes a shorter prefix and the cover reappears).
+  const m4 = new THREE.Matrix4();
+  let shownDestroyed = -1;
+  group.userData.setDestroyed = (destroyed) => {
+    if (destroyed.length === shownDestroyed) return;
+    shownDestroyed = destroyed.length;
+    const gone = new Set(destroyed);
+    coverCells.forEach(({ cx, cz }, i) => {
+      const c = cellCenter(map, cx, cz);
+      const hidden = gone.has(cz * map.width + cx);
+      m4.makeTranslation(c.x, COVER_VIS_HEIGHT / 2, c.z);
+      if (hidden) m4.scale(new THREE.Vector3(0, 0, 0));
+      coverMesh.setMatrixAt(i, m4);
+    });
+    coverMesh.instanceMatrix.needsUpdate = true;
   };
 
   scene.add(group);

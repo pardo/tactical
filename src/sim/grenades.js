@@ -3,10 +3,13 @@ import { DT, TICK_RATE } from './constants.js';
 import { headingTo, sin, cos, length, wrapAngle, PI } from './fmath.js';
 import { hasLineOfSight } from './los.js';
 import { damageSoldier, EYE_HEIGHT } from './soldier/soldier.js';
+import { worldToCell, cellCenter } from './map.js';
+import { destroyCover } from './cover.js';
 
 export const GRENADE_RANGE = 14;
 export const GRENADE = {
-  frag: { fuse: 2.2, radius: 6, damage: 130 },
+  // shatter: low cover whose centre is this close to the blast is destroyed.
+  frag: { fuse: 2.2, radius: 6, damage: 130, shatter: 1.6 },
   flash: { fuse: 1.5, radius: 9, blind: 3.2 },
   smoke: { fuse: 1.2, radius: 3.2, duration: 15 },
 };
@@ -52,6 +55,7 @@ function detonate(world, g) {
   const spec = GRENADE[g.kind];
   world.events.push({ type: 'explosion', kind: g.kind, grenadeId: g.id, x: p.x, y: p.y, z: p.z, radius: spec.radius });
 
+  if (g.kind === 'frag') shatterCover(world, p.x, p.z, spec.shatter);
   if (g.kind === 'smoke') {
     world.smokes.push({ x: p.x, z: p.z, r: spec.radius, until: world.tick + spec.duration * TICK_RATE });
   } else {
@@ -75,6 +79,16 @@ function detonate(world, g) {
     }
   }
   world.physics.removeRigidBody(g.body);
+}
+
+function shatterCover(world, x, z, radius) {
+  const { cx, cz } = worldToCell(world.map, x, z);
+  for (let dz = -2; dz <= 2; dz++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const c = cellCenter(world.map, cx + dx, cz + dz);
+      if (length(c.x - x, c.z - z) <= radius) destroyCover(world, cx + dx, cz + dz);
+    }
+  }
 }
 
 export function updateGrenades(world) {

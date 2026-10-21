@@ -97,3 +97,25 @@ describe('doors', () => {
     expect(Math.hypot(a.x - here.x, a.z - here.z)).toBeGreaterThan(0.1);
   });
 });
+
+describe('destructible cover', () => {
+  it('a frag next to low cover destroys it: walkable, and no longer blocks sight', async () => {
+    const { Tile, isWalkable } = await import('../src/sim/map.js');
+    const w = createWorld(1, parseMap({ name: 'c', rows: ['############', '#A........B#', '#....==....#', '#..........#', '############'] }));
+    spawnSquads(w, { A: ['demolition'], B: ['rifleman'] });
+    const [a] = w.soldiers;
+    a.hp = 1e6;
+    w.soldiers[1].hp = 1e6;
+    const cover = cellCenter(w.map, 5, 2);
+    // Line across the cover at knee height is blocked before the blast.
+    expect(hasLineOfSight(w, cover.x, 0.5, cover.z - 1.2, cover.x, 0.5, cover.z + 1.2)).toBe(false);
+    const wp = { ...makeWaypoint(a.x, a.z), fire: 'hold', actions: [{ type: 'grenade', kind: 'frag', x: cover.x + 0.5, z: cover.z }] };
+    applyPlans(w, 'A', { [a.id]: [wp] });
+    run(w, 60 * 4);
+    expect(w.destroyed.length).toBeGreaterThan(0);
+    expect(w.map.tiles[2 * w.map.width + 5]).toBe(Tile.FLOOR);
+    expect(isWalkable(w.map, 5, 2)).toBe(true);
+    w.physics.step();
+    expect(hasLineOfSight(w, cover.x, 0.5, cover.z - 1.2, cover.x, 0.5, cover.z + 1.2)).toBe(true);
+  });
+});

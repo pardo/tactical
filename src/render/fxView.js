@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 
 /** Short-lived effects driven by sim events: tracers, explosions, plus grenade meshes. */
-export function createFxView(scene) {
+/** @param mapSize { width, height } so cell events can be placed in the world */
+export function createFxView(scene, mapSize = { width: 0, height: 0 }) {
+  const mapHalf = { w: mapSize.width / 2, h: mapSize.height / 2 };
   const group = new THREE.Group();
   scene.add(group);
   const live = [];
@@ -50,6 +52,30 @@ export function createFxView(scene) {
     live.push({ obj: ring, age: 0, life: 0.8, update: (t) => (ringMat.opacity = 0.8 * (1 - t)) });
   }
 
+  const debrisMat = new THREE.MeshLambertMaterial({ color: 0x8a7350, transparent: true });
+  /** Chunks of a destroyed cover tile flying out and fading. */
+  function debris(e) {
+    const c = { x: e.cx - mapHalf.w + 0.5, z: e.cz - mapHalf.h + 0.5 };
+    for (let i = 0; i < 6; i++) {
+      const chunk = new THREE.Mesh(blastGeo, debrisMat.clone());
+      chunk.scale.setScalar(0.12);
+      chunk.position.set(c.x, 0.5, c.z);
+      const vx = Math.cos(i) * 2.5;
+      const vz = Math.sin(i) * 2.5;
+      group.add(chunk);
+      live.push({
+        obj: chunk,
+        sharedGeometry: true,
+        age: 0,
+        life: 0.7,
+        update: (t) => {
+          chunk.position.set(c.x + vx * t * 0.7, 0.5 + 2 * t - 3.5 * t * t, c.z + vz * t * 0.7);
+          chunk.material.opacity = 1 - t;
+        },
+      });
+    }
+  }
+
   return {
     /** Spawn effects for a frame's events (only when playing forward, not when scrubbing). */
     play(frame) {
@@ -57,6 +83,7 @@ export function createFxView(scene) {
         if (e.type === 'shot') tracer(e);
         else if (e.type === 'explosion') explosion(e);
         else if (e.type === 'breach') explosion({ ...e, kind: 'breach', y: 1, radius: 2.5 });
+        else if (e.type === 'coverDestroyed') debris(e);
       }
     },
 
