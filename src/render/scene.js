@@ -16,19 +16,16 @@ export function createScene(container) {
   const sun = new THREE.DirectionalLight(0xffffff, 1.5);
   sun.position.set(8, 20, 6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  sun.shadow.camera.left = sun.shadow.camera.bottom = -20;
-  sun.shadow.camera.right = sun.shadow.camera.top = 20;
+  sun.shadow.mapSize.set(2048, 2048);
   scene.add(sun);
 
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 40),
-    new THREE.MeshStandardMaterial({ color: 0x3a3f44 }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-  scene.add(new THREE.GridHelper(40, 40, 0x555555, 0x2a2a2a));
+  /** Fit the shadow camera to the playable area. */
+  function setShadowBounds(halfSize) {
+    const c = sun.shadow.camera;
+    c.left = c.bottom = -halfSize;
+    c.right = c.top = halfSize;
+    c.updateProjectionMatrix();
+  }
 
   const resizeHandlers = [];
   function resize() {
@@ -52,6 +49,7 @@ export function createScene(container) {
       resizeHandlers.push(fn);
       resize();
     },
+    setShadowBounds,
     render: () => renderer.render(scene, camera),
   };
 }

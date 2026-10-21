@@ -15,6 +15,11 @@ export default [
       'no-restricted-properties': [
         'error',
         { object: 'Math', property: 'random', message: 'Use the seeded rng.' },
+        ...['sin', 'cos', 'tan', 'atan', 'atan2', 'asin', 'acos', 'hypot', 'exp', 'log', 'pow', 'cbrt'].map((property) => ({
+          object: 'Math',
+          property,
+          message: 'Not bit-identical across browsers; use sim/fmath.js.',
+        })),
         { object: 'Date', property: 'now', message: 'No wall-clock time in the sim.' },
         { object: 'performance', property: 'now', message: 'No wall-clock time in the sim.' },
       ],

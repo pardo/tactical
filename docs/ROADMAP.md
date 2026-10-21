@@ -106,13 +106,15 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 **Done when:** `npm run dev` shows an empty Three.js scene; `npm test` passes a determinism smoke test.
 
 ### M1 — Sandbox: map, movement, camera
-- [ ] Map format (JSON grid: floor, wall, low cover, high cover, door, window, spawn zones)
-- [ ] Map loader → Rapier static colliders + Three.js meshes (simple boxes)
+- [x] Map format (ASCII grid: floor, wall, low cover, doorway, spawns) — `src/maps/killhouse.js`
+- [ ] Map format extras: high cover, windows, spawn zones (with M5 doors)
+- [x] Map loader → Rapier static colliders (run-merged) + instanced Three.js meshes
 - [x] Camera: pan, zoom-to-point, rotate — touch (drag/pinch/twist) + mouse + keyboard
 - [x] Mobile shell: no browser zoom/scroll, safe areas, DPR cap, orientation-aware FOV, fullscreen button
 - [x] Gesture layer (tap / long-press / pan / pinch / twist), unit tested
-- [ ] Soldier entity (capsule placeholder), grid A* + path smoothing
-- [ ] Click to select, click to move; sim runs in real time for debugging
+- [x] Soldier entity (capsule placeholder), grid A* (deterministic ties, no corner cutting) + clearance-aware smoothing
+- [x] Tap/click to select, tap to walk, long-press to run; sim runs in real time for debugging
+- [x] Deterministic trig (`sim/fmath.js`); lint bans `Math.sin` & co. inside `src/sim`
 
 **Done when:** a soldier walks around walls smoothly on a hand-made test map.
 
@@ -216,7 +218,7 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 
 | Risk | Mitigation |
 |---|---|
-| Floating-point desync between browsers | Rapier deterministic build; keep own sim math simple; state hash each turn; determinism test suite in CI |
+| Floating-point desync between browsers | Rapier deterministic build; own trig in `sim/fmath.js` (Math.sin etc. differ per engine); state hash each turn; determinism test suite in CI |
 | Rapier WASM init async/complexity | Wrap in `physics.js`; use only static colliders + raycasts + grenade bodies |
 | Planning UI becomes too fiddly | Prototype UI in M2 before content; playtest early |
 | AI autonomy feels random/unfair | Expose reaction numbers in debug overlay; review mode shows *why* (e.g. "spotted at 0.4 s, outside arc +0.3 s") |
