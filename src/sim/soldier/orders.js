@@ -153,6 +153,9 @@ function runAction(world, s, a, engaged) {
       }
       return true;
     }
+    case 'code':
+      // Hold (across turns if need be) until the player releases this go code.
+      return world.goCodes[s.team].includes(a.code);
     case 'until':
       // Synchronise with the team: hold until this many seconds into the turn.
       return (world.tick - world.turnStart) / TICK_RATE >= a.t;
@@ -221,7 +224,7 @@ export function updateOrders(world, s, engaged) {
     advance(s);
     return;
   }
-  if (a.type === 'wait' || a.type === 'until') idleReactions(s, engaged);
+  if (a.type === 'wait' || a.type === 'until' || a.type === 'code') idleReactions(s, engaged);
   if (runAction(world, s, a, engaged)) {
     s.actionIdx++;
     s.actionTimer = 0;

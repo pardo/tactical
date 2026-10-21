@@ -7,7 +7,7 @@ import { updatePerception } from './soldier/perception.js';
 import { updateCombat } from './soldier/combat.js';
 import { updateOrders } from './soldier/orders.js';
 import { updateGrenades } from './grenades.js';
-import { sanitizeWaypoints } from './plan.js';
+import { sanitizeWaypoints, sanitizeGoCodes } from './plan.js';
 import { PI } from './fmath.js';
 import { DEFAULT_SQUAD, sanitizeSquad } from './roles.js';
 import { createDoors } from './doors.js';
@@ -44,6 +44,7 @@ export function createWorld(seed, map, mode = 'elimination') {
     events: [],
     winner: null,
     objective: createObjective(mode),
+    goCodes: { A: [], B: [] }, // go codes each team released this turn
     nextId: 1,
   };
 }
@@ -102,6 +103,7 @@ export function spawnSquads(world, squads = { A: DEFAULT_SQUAD, B: DEFAULT_SQUAD
  * is unchanged keep their progress (e.g. half-finished waits).
  */
 export function applyPlans(world, team, plans) {
+  world.goCodes[team] = sanitizeGoCodes(plans?.go);
   for (const s of world.soldiers) {
     if (s.team !== team || !s.alive || !(s.id in plans)) continue;
     const orders = sanitizeWaypoints(world.map, plans[s.id]);
@@ -174,5 +176,6 @@ export function hashWorld(world) {
   for (const i of world.destroyed) h.num(i);
   if (world.objective) hashValue(h, world.objective);
   for (const d of world.doors) h.num(d.id).str(d.state);
+  for (const t of TEAMS) h.str(t).str(world.goCodes[t].join(''));
   return h.digest();
 }

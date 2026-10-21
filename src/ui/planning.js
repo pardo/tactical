@@ -1,6 +1,6 @@
 import { findPath } from '../sim/nav.js';
 import { isWalkableAt } from '../sim/map.js';
-import { makeWaypoint, MAX_WAYPOINTS, MAX_ACTIONS, MAX_WAIT } from '../sim/plan.js';
+import { makeWaypoint, MAX_WAYPOINTS, MAX_ACTIONS, MAX_WAIT, GO_CODES } from '../sim/plan.js';
 
 /**
  * Editing state for one team's drafts during the planning phase.
@@ -126,6 +126,8 @@ export function createPlanning(map) {
       // tapping "Sync" again moves the sync time later (wrapping around the turn).
       if (action.type === 'wait' && last?.type === 'wait') last.t = Math.min(MAX_WAIT, last.t + action.t);
       else if (action.type === 'until' && last?.type === 'until') last.t = last.t >= 5 ? 0.5 : last.t + 0.5;
+      // Tapping "Go code" again cycles Alpha → Bravo → Charlie.
+      else if (action.type === 'code' && last?.type === 'code') last.code = GO_CODES[(GO_CODES.indexOf(last.code) + 1) % GO_CODES.length];
       else w.actions.push(action);
       return true;
     },
@@ -193,6 +195,26 @@ export function createPlanning(map) {
       if (mode.startsWith('grenade:')) return api.addAction({ type: 'grenade', kind: mode.slice(8), x, z });
       if (mode === 'breach') return api.addAction({ type: 'breach', x, z });
       return api.addAction({ type: mode, x, z });
+    },
+
+    /** Go codes some soldier of this team is (or will be) waiting on, in order. */
+    get usedCodes() {
+      const used = new Set();
+      for (const [k, list] of Object.entries(st.drafts ?? {})) {
+        if (k === 'go') continue;
+        for (const w of list) for (const a of w.actions) if (a.type === 'code') used.add(a.code);
+      }
+      return GO_CODES.filter((c) => used.has(c));
+    },
+
+    /** Release (or hold back) a go code at the start of this turn. */
+    toggleGo(code) {
+      if (!GO_CODES.includes(code)) return;
+      snapshot();
+      const go = new Set(st.drafts.go ?? []);
+      if (go.has(code)) go.delete(code);
+      else go.add(code);
+      st.drafts.go = GO_CODES.filter((c) => go.has(c));
     },
 
     undo() {

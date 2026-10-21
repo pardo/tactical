@@ -20,7 +20,7 @@ export function isFreeToTurn(s) {
   if (!wp) return true;
   if (!s.arrived || wp.look) return false;
   const a = wp.actions[s.actionIdx];
-  return !wp.actions.some((x) => x.type === 'face') && (!a || a.type === 'wait' || a.type === 'until');
+  return !wp.actions.some((x) => x.type === 'face') && (!a || a.type === 'wait' || a.type === 'until' || a.type === 'code');
 }
 
 export function canSee(world, s, e) {

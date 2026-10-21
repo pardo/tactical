@@ -1,3 +1,4 @@
+import { GO_CODE_NAMES } from '../sim/plan.js';
 import { GRENADE_RANGE } from '../sim/grenades.js';
 
 /**
@@ -16,6 +17,8 @@ export const ACTION_HELP = {
   'stance:stand': ['▲ Stand', 'Stands up: sees and shoots over low cover, moves at full speed.'],
   face: ['➜ Face…', 'Turns toward a point you tap and keeps covering that angle — "holding the angle" gives the fastest reaction (≈0.12 s). Sounds and teammates\' calls won\'t turn it away; after a firefight it turns back.'],
   faceHere: ['➜ Face…', 'Turns in place toward a point you tap and holds that angle, no waypoint needed. Sounds and teammates\' calls won\'t turn it away.'],
+  code: ['⏸ Go code', 'Waits here — over several turns if needed — until you release its code: Alpha (tap again for Bravo, Charlie). Release codes with the buttons above your squad, then press GO: everyone waiting on that code moves at once.'],
+  go: ['▶ Go code', 'Tap to release this code at the start of the turn (▶ goes), or keep it held (⏸ waits). Soldiers that reach a waypoint for an already released code go straight on.'],
   wait: ['⏱ Wait', 'Stays put for 1 s before the next action or waypoint. Tap again to add another second.'],
   until: ['⏲ Sync', 'Waits until a moment of the 5 s turn (e.g. @2s), so several soldiers can move at once. Tap again for +0.5 s.'],
   breach: ['🧨 Breach…', 'Tap a closed door next to the soldier: blows it open, stunning (and maybe hurting) enemies right behind it. Very loud.'],
@@ -33,6 +36,8 @@ export function helpFor(action, arg) {
     : action === 'addCover' ? 'cover'
     : action === 'addWait' ? 'wait'
     : action === 'addSync' ? 'until'
+    : action === 'addCode' ? 'code'
+    : action === 'toggleGo' ? 'go'
     : action === 'pick' ? arg
     : null;
   const h = key && ACTION_HELP[key];
@@ -50,6 +55,7 @@ function actionText(a) {
   if (a.type === 'grenade') return GRENADE_TEXT[a.kind];
   if (a.type === 'breach') return 'blow the door';
   if (a.type === 'cover') return 'take cover';
+  if (a.type === 'code') return `wait for go code ${GO_CODE_NAMES[a.code]}`;
   return a.type;
 }
 

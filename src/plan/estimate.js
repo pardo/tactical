@@ -9,8 +9,9 @@ const COVER_TIME = 1.2; // short hop to cover + crouch (destination unknown unti
 
 const dist = (a, b) => Math.sqrt((b.x - a.x) ** 2 + (b.z - a.z) ** 2);
 
-/** Seconds an action takes when it starts at turn time t. */
-export function actionDuration(a, t = 0) {
+/** Seconds an action takes when it starts at turn time t (a go code not released this turn: forever). */
+export function actionDuration(a, t = 0, released = []) {
+  if (a.type === 'code') return released.includes(a.code) ? 0 : Infinity;
   if (a.type === 'wait') return a.t;
   if (a.type === 'until') return Math.max(0, a.t - t);
   if (a.type === 'face') return FACE_TIME;
@@ -40,18 +41,20 @@ function doorsCrossed(map, a, b, closedDoors, counted) {
  * path drawing, per-waypoint ETAs and the "where am I at the end of the turn" marker.
  *
  * @param closedDoors optional Set of "cx,cz" keys of closed doors (adds opening time)
+ * @param released go codes released this turn; waiting on any other code holds the soldier
  * @returns {{
  *   legs: { points: {x,z}[], move: string, blocked: boolean }[],
- *   marks: { arrive: number, done: number }[],
+ *   marks: { arrive: number, done: number, held?: string }[], // held: go code this waypoint waits behind
  *   atTurnEnd: {x,z} | null,   // null if the plan finishes before the turn ends
  *   end: {x,z}, total: number }}
  */
-export function estimatePlan(map, start, waypoints, closedDoors = null) {
+export function estimatePlan(map, start, waypoints, closedDoors = null, released = []) {
   const counted = new Set();
   let pos = { x: start.x, z: start.z };
   let stance = start.stance ?? 'stand';
   let t = 0;
   let atTurnEnd = null;
+  let held = null;
   const legs = [];
   const marks = [];
 
@@ -67,7 +70,7 @@ export function estimatePlan(map, start, waypoints, closedDoors = null) {
     const path = findPath(map, pos.x, pos.z, wp.x, wp.z);
     if (!path) {
       legs.push({ points: [pos, { x: wp.x, z: wp.z }], move: wp.move, blocked: true });
-      marks.push({ arrive: Infinity, done: Infinity });
+      marks.push({ arrive: Infinity, done: Infinity, ...(held && { held }) });
       break;
     }
     if (wp.move === 'run') stance = 'stand';
@@ -79,12 +82,14 @@ export function estimatePlan(map, start, waypoints, closedDoors = null) {
     }
     legs.push({ points, move: wp.move, blocked: false });
     const arrive = t;
+    const heldBefore = held;
     pos = points[points.length - 1];
     for (const a of wp.actions) {
       if (a.type === 'stance') stance = a.stance;
-      span(pos, pos, actionDuration(a, t));
+      if (a.type === 'code' && !released.includes(a.code)) held ??= a.code;
+      span(pos, pos, actionDuration(a, t, released));
     }
-    marks.push({ arrive, done: t });
+    marks.push({ arrive, done: t, ...(heldBefore && { held: heldBefore }) });
   }
   return { legs, marks, atTurnEnd, end: pos, total: t };
 }

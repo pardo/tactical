@@ -65,6 +65,7 @@ async (page) => {
   const vh = page.viewportSize().height;
   if (panel.y + panel.height > vh + 1 || panel.height > vh * 0.5) fail(`waypoint panel too tall: ${JSON.stringify(panel)} of ${vh}`);
 
+
   // Drag the waypoint with a finger: project it to screen, then drag 40px.
   const at = await page.evaluate(() => {
     const t = window.__tactical;
@@ -88,6 +89,16 @@ async (page) => {
     const shown = await page.evaluate(() => window.__tactical.view.scene.children.length);
     if (!shown) fail('scene empty');
   }
+
+  // Go code (after the drag: its release row makes the bottom area taller): the waypoint waits for Alpha; the release button appears above the squad and toggles.
+  await page.getByRole('button', { name: '⏸ Go code' }).tap();
+  await page.getByRole('button', { name: '⏸ Alpha waits' }).waitFor({ timeout: 2000 });
+  await page.getByRole('button', { name: '⏸ Alpha waits' }).tap();
+  await page.getByRole('button', { name: '▶ Alpha goes' }).waitFor({ timeout: 2000 });
+  const go = await page.evaluate(() => window.__tactical.game.planning.state.drafts.go);
+  if (JSON.stringify(go) !== '["A"]') fail(`go codes ${JSON.stringify(go)}`);
+  const bar = await page.locator('#bottom .bar').boundingBox();
+  if (bar.y + bar.height > vh + 1) fail(`bar with go codes overflows: ${JSON.stringify(bar)}`);
 
   await page.getByRole('button', { name: 'GO ▶' }).tap();
   await page.waitForTimeout(200);

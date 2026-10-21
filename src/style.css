@@ -121,6 +121,10 @@ button.danger { color: #ff7a6b; }
 #bottom .row.info { color: var(--muted); font-size: 12px; padding: 0 2px; }
 #bottom .row .sep { flex: 0 0 8px; }
 #bottom .row button { flex: 0 0 auto; min-height: 38px; padding: 0 9px; font-size: 13px; }
+/* Waypoint orders: two rows that scroll sideways, so the panel doesn't cover half a phone screen. */
+#bottom .row.tools { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); justify-content: start; overflow-x: auto; scrollbar-width: none; }
+#bottom .row.tools::-webkit-scrollbar { display: none; }
+#bottom .row .pick-help { flex: 1; min-width: 0; font-size: 12px; line-height: 1.3; }
 #bottom .row.actions .lbl { color: var(--muted); font-size: 12px; }
 #bottom .row.explain { font-size: 12px; line-height: 1.35; padding: 2px 4px; color: var(--fg); background: rgba(255, 255, 255, 0.06); border-radius: 8px; }
 #bottom .row.actions button { min-height: 32px; font-size: 12px; border-style: dashed; }
@@ -132,7 +136,11 @@ button.danger { color: #ff7a6b; }
 #bottom .timeline .live.on { color: #ff6060; border-color: #ff6060; }
 
 #bottom .bar { display: flex; gap: 6px; align-items: stretch; }
-#bottom .bar .chips { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; }
+#bottom .bar { flex-wrap: wrap; }
+#bottom .bar .chips { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+#bottom .bar .codes { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 6px; border-radius: 12px; background: var(--bg); }
+#bottom .bar .codes .lbl { color: var(--muted); font-size: 12px; }
+#bottom .bar .codes button { min-height: 38px; padding: 0 10px; font-size: 13px; }
 #bottom .bar .go { flex: 0 0 auto; min-width: 88px; min-height: 52px; font-size: 16px; }
 #bottom .bar .undo { min-height: 52px; font-size: 20px; }
 .chip { position: relative; min-width: 52px; min-height: 52px; padding: 0 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; }

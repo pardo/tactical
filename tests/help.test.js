@@ -7,7 +7,7 @@ describe('action help', () => {
     const controls = [
       ['move', 'walk'], ['move', 'run'],
       ['fire', 'onSight'], ['fire', 'return'], ['fire', 'hold'],
-      ['addCover', ''], ['addStance', 'crouch'], ['addStance', 'stand'], ['addWait', ''], ['addSync', ''],
+      ['addCover', ''], ['addStance', 'crouch'], ['addStance', 'stand'], ['addWait', ''], ['addSync', ''], ['addCode', ''], ['toggleGo', 'A'],
       ['pick', 'face'], ['pick', 'faceHere'], ['pick', 'look'], ['pick', 'breach'],
       ['pick', 'grenade:frag'], ['pick', 'grenade:flash'], ['pick', 'grenade:smoke'],
     ];

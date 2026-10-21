@@ -1,5 +1,6 @@
 import { TOOLS } from './editor.js';
 import { ACTION_HELP } from './help.js';
+import { GO_CODE_NAMES } from '../sim/plan.js';
 
 /**
  * DOM overlay. Buttons carry data-action / data-arg; clicks are delegated to
@@ -26,6 +27,7 @@ export function actionLabel(a) {
   if (a.type === 'until') return `⏲ @${a.t}s`;
   if (a.type === 'breach') return '🧨 Breach';
   if (a.type === 'cover') return '🛡 Cover';
+  if (a.type === 'code') return `⏸${a.code} ${GO_CODE_NAMES[a.code]}`;
   return ICON[a.type] ?? a.type;
 }
 
@@ -172,6 +174,11 @@ export function createHud(root, onAction) {
       set(
         'bar',
         JSON.stringify(model),
+        (model.codes?.length
+          ? `<div class="codes"><span class="lbl">Go codes this turn:</span>${model.codes
+              .map((c) => btn('toggleGo', c.on ? `▶ ${GO_CODE_NAMES[c.code]} goes` : `⏸ ${GO_CODE_NAMES[c.code]} waits`, { arg: c.code, cls: c.on ? 'on' : '', title: tip('go') }))
+              .join('')}</div>`
+          : '') +
         `<div class="chips">${chips}</div>` +
           btn('undo', '↶', { cls: 'undo', title: 'Undo', disabled: !model.canUndo }) +
           btn('go', `GO ▶`, { cls: 'go', title: 'Confirm plan' }),
@@ -211,6 +218,14 @@ export function createHud(root, onAction) {
         );
       }
       const w = model.wp;
+      if (model.pickMode) {
+        // Picking a point on the map: shrink to one line so the map is free to tap.
+        return set(
+          'panel',
+          JSON.stringify(model),
+          `<div class="row">${btn('cancelPick', '✕ Cancel')}<span class="pick-help">${esc(model.explain ?? '')}</span></div>`,
+        );
+      }
       const actions = w.actions
         .map((a, k) => btn('removeAction', `${actionLabel(a)} ✕`, { arg: k, cls: 'action' }))
         .join('');
@@ -223,12 +238,13 @@ export function createHud(root, onAction) {
            <span class="sep"></span>
            ${btn('fire', '🎯 Fire at will', { arg: 'onSight', cls: w.fire === 'onSight' ? 'on' : '', title: tip('fire:onSight') })}${btn('fire', '↩ Return fire', { arg: 'return', cls: w.fire === 'return' ? 'on' : '', title: tip('fire:return') })}${btn('fire', '🤫 Hold fire', { arg: 'hold', cls: w.fire === 'hold' ? 'on' : '', title: tip('fire:hold') })}
          </div>
-         <div class="row">
+         <div class="row tools">
            ${btn('addCover', '🛡 Take cover', { title: tip('cover') })}
            ${btn('addStance', '▼ Crouch', { arg: 'crouch', title: tip('stance:crouch') })}${btn('addStance', '▲ Stand', { arg: 'stand', title: tip('stance:stand') })}
            ${btn('pick', '➜ Face…', { arg: 'face', cls: model.pickMode === 'face' ? 'on' : '', title: tip('face') })}
            ${btn('addWait', '⏱ +1s', { title: tip('wait') })}
            ${btn('addSync', '⏲ Sync', { title: tip('until') })}
+           ${btn('addCode', '⏸ Go code', { title: tip('code') })}
            ${model.charges > 0 ? btn('pick', `🧨 Breach ×${model.charges}…`, { arg: 'breach', cls: model.pickMode === 'breach' ? 'on' : '', title: tip('breach') }) : ''}
            ${['frag', 'flash', 'smoke']
              .filter((k) => model.gear[k] > 0)
@@ -254,7 +270,7 @@ export function createHud(root, onAction) {
 
 const HELP_KEYS = {
   leg: ['move:walk', 'move:run', 'fire:onSight', 'fire:return', 'fire:hold', 'look'],
-  arrival: ['cover', 'stance:crouch', 'stance:stand', 'face', 'wait', 'until', 'breach', 'grenade:frag', 'grenade:flash', 'grenade:smoke'],
+  arrival: ['cover', 'stance:crouch', 'stance:stand', 'face', 'wait', 'until', 'code', 'breach', 'grenade:frag', 'grenade:flash', 'grenade:smoke'],
 };
 const helpRow = (key) => `<dt>${esc(ACTION_HELP[key][0])}</dt><dd>${esc(ACTION_HELP[key][1])}</dd>`;
 
@@ -354,6 +370,7 @@ export const overlays = {
         <li><b>Tap a soldier</b> (or a chip at the bottom) to select it.</li>
         <li><b>Tap the map</b> to add a waypoint, <b>hold</b> to add a running one.</li>
         <li><b>Tap a waypoint</b> to edit it, <b>drag</b> (or hold, then drag) to move it.</li>
+        <li><b>Go codes</b>: give soldiers a ⏸ Go code order (Alpha, Bravo, Charlie) and they wait there, even for several turns, until you tap ▶ above your squad to release that code.</li>
         <li>To just turn a soldier where it stands, select it and tap <b>➜ Face…</b> (no waypoint needed).</li>
         <li>Labels show when each soldier arrives; the white ring is where they'll be when the 5 s end.</li>
         <li>The panel's 📋 line says in words what the selected waypoint will do. Tap any button and that line explains it.</li>
@@ -363,7 +380,7 @@ export const overlays = {
       <dl class="help">${HELP_KEYS.leg.map(helpRow).join('')}</dl>
       <p class="small">What the soldier does on arrival, one after another, in the order you add them
       (tap a queued one to remove it):</p>
-      <dl class="help">${HELP_KEYS.arrival.map(helpRow).join('')}</dl>
+      <dl class="help">${HELP_KEYS.arrival.map(helpRow).join('')}${helpRow('go')}</dl>
       <h3>Fighting</h3>
       <ul>
         <li>Soldiers shoot on their own. <b>Reaction time</b> decides most fights: holding an angle

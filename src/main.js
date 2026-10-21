@@ -2,7 +2,7 @@ import { helpFor, describeWaypoint } from './ui/help.js';
 import './style.css';
 import { initPhysics } from './sim/physics.js';
 import { TICK_RATE, TURN_TICKS, DT } from './sim/constants.js';
-import { makeWaypoint } from './sim/plan.js';
+import { makeWaypoint, GO_CODE_NAMES } from './sim/plan.js';
 import { createMatch, TEAM_NAMES } from './game/match.js';
 import { ROLES, WEAPONS, DEFAULT_SQUAD, cycleRole } from './sim/roles.js';
 import { createRecorder, frameVision as frameVisionSet } from './game/recorder.js';
@@ -454,8 +454,9 @@ function logFrame(i, frame) {
 }
 
 function visibleLog() {
-  // Don't leak the AI's thoughts while the match is on; once it is over, show everything.
-  const hideTeam = g.mode === 'vsAI' && g.match.phase !== 'over' ? 'B' : null;
+  // Don't leak the opponent's side of the log while the match is on; once it is over, show everything.
+  const opponent = g.mode === 'vsAI' ? 'B' : g.mode === 'online' ? (g.match.localTeam === 'A' ? 'B' : 'A') : null;
+  const hideTeam = g.match.phase !== 'over' ? opponent : null;
   const out = [];
   for (let k = g.log.length - 1; k >= 0 && out.length < LOG_LINES; k--) {
     const e = g.log[k];
@@ -867,6 +868,14 @@ function onAction(action, arg) {
       explain(action, arg);
       P.addAction({ type: 'cover' });
       break;
+    case 'addCode':
+      explain(action, arg);
+      P.addAction({ type: 'code', code: 'A' });
+      break;
+    case 'toggleGo':
+      explain(action, arg);
+      P.toggleGo(arg);
+      break;
     case 'addSync':
       explain(action, arg);
       P.addAction({ type: 'until', t: 1 });
@@ -875,6 +884,9 @@ function onAction(action, arg) {
       explain(action, arg);
       if (P.state.pickMode === arg) P.cancelPick();
       else P.startPick(arg);
+      break;
+    case 'cancelPick':
+      P.cancelPick();
       break;
     case 'removeAction':
       P.removeAction(Number(arg));
@@ -1015,6 +1027,7 @@ function updateHud() {
     hud.bar({
       kind: 'plan',
       canUndo: P.state.undoStack.length > 0,
+      codes: P.usedCodes.map((code) => ({ code, on: (P.state.drafts.go ?? []).includes(code) })),
       soldiers: own.map((s) => ({
         id: s.id,
         team,
@@ -1037,7 +1050,7 @@ function updateHud() {
         label: match.labels[s.id],
         index: P.state.wpIndex,
         count: P.state.drafts[s.id].length,
-        eta: mark ? (Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : 'unreachable') : '–',
+        eta: mark ? (mark.held ? `after go code ${GO_CODE_NAMES[mark.held]}` : Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : 'unreachable') : '–',
         gear: s.gear,
         charges: s.charges,
         pickMode: P.state.pickMode,
@@ -1097,13 +1110,16 @@ function drawPlans() {
         start: { x: s.x, z: s.z, stance: s.stance },
         waypoints: P.state.drafts[s.id] ?? [],
         editable: true,
+        released: P.state.drafts.go ?? [],
       }));
     selected = P.state.selectedId !== null ? { soldierId: P.state.selectedId, index: P.state.wpIndex } : null;
   } else {
     const t = g.recorder.turnAt(g.cursor);
     if (!t) return g.plans.hide();
     const start = frames()[t.frame];
-    const showTeams = g.mode === 'vsAI' && g.match.phase !== 'over' ? ['A'] : ['A', 'B'];
+    // While the match is on, only your own side's plans (an opponent's later waypoints would give away their intent).
+    const own = g.mode === 'vsAI' ? 'A' : g.mode === 'online' ? match.localTeam : null;
+    const showTeams = own && match.phase !== 'over' ? [own] : ['A', 'B'];
     plans = start.soldiers
       .filter((s) => s.alive && showTeams.includes(s.team))
       .map((s) => ({
@@ -1112,6 +1128,7 @@ function drawPlans() {
         start: { x: s.x, z: s.z, stance: s.stance },
         waypoints: t.plans[s.team][s.id] ?? [],
         editable: false,
+        released: t.plans[s.team].go ?? [],
       }));
   }
   const doorFrame = editing() ? frames()[frames().length - 1] : frames()[g.recorder.turnAt(g.cursor)?.frame ?? 0];
@@ -1129,9 +1146,9 @@ function drawPlans() {
   const est = estimates.get(sid);
   wps.forEach((w, i) => {
     const mark = est?.marks[i];
-    const eta = mark && Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : '✕';
+    const eta = mark?.held ? `⏸${mark.held}` : mark && Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : '✕';
     const icons = w.actions.map((a) => actionLabel(a).split(' ')[0]).join('');
-    const cls = `${i === P.state.wpIndex ? 'sel' : ''} ${mark && mark.arrive > TURN_TICKS / TICK_RATE ? 'late' : ''}`;
+    const cls = `${i === P.state.wpIndex ? 'sel' : ''} ${mark && !mark.held && mark.arrive > TURN_TICKS / TICK_RATE ? 'late' : ''}`;
     labels.add(`${i + 1} · ${eta}${icons ? ` ${icons}` : ''}`, { x: w.x, y: 0.2, z: w.z }, view.camera, viewW, viewH, cls);
   });
   if (est?.atTurnEnd) labels.add('5s', { ...est.atTurnEnd, y: 0.2 }, view.camera, viewW, viewH);

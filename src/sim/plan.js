@@ -14,7 +14,11 @@
  *              | { type: 'until', t } // hold until t seconds into the turn (team sync)
  *              | { type: 'breach', x, z } // blow the closed door nearest (x, z)
  *              | { type: 'cover' }    // move behind the nearest low cover facing the threat, crouch
+ *              | { type: 'code', code: 'A' | 'B' | 'C' } // wait (across turns) until the team releases this go code
  *              | { type: 'grenade', kind: 'frag' | 'flash' | 'smoke', x, z } ] }
+ *
+ * A team's plans map soldierId → waypoints, plus an optional `go: ['A', …]`:
+ * the go codes released at the start of this turn.
  */
 export const MAX_WAYPOINTS = 16;
 export const MAX_ACTIONS = 6;
@@ -25,6 +29,13 @@ export const MOVE_MODES = ['walk', 'run'];
 export const FIRE_MODES = ['onSight', 'return', 'hold'];
 export const STANCES = ['stand', 'crouch'];
 export const GRENADE_KINDS = ['frag', 'flash', 'smoke'];
+export const GO_CODES = ['A', 'B', 'C'];
+export const GO_CODE_NAMES = { A: 'Alpha', B: 'Bravo', C: 'Charlie' };
+
+/** Released go codes from a team's plans, in canonical order. */
+export function sanitizeGoCodes(go) {
+  return Array.isArray(go) ? GO_CODES.filter((c) => go.includes(c)) : [];
+}
 
 export function makeWaypoint(x, z, prev = null) {
   return { x, z, move: prev?.move ?? 'walk', fire: prev?.fire ?? 'onSight', look: null, actions: [] };
@@ -66,6 +77,8 @@ export function sanitizeWaypoints(map, waypoints) {
             return { type: 'breach', x: cx(a.x), z: cz(a.z) };
           case 'cover':
             return { type: 'cover' };
+          case 'code':
+            return { type: 'code', code: oneOf(a.code, GO_CODES) };
           default:
             return null;
         }

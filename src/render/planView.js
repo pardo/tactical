@@ -57,7 +57,7 @@ export function createPlanView(scene) {
 
   /**
    * @param map sim map
-   * @param plans [{ soldierId, team, start:{x,z,stance}, waypoints, editable }]
+   * @param plans [{ soldierId, team, start:{x,z,stance}, waypoints, editable, released? }] (released: go codes)
    * @param selected { soldierId, index } | null
    */
   function setPlans(map, plans, selected, closedDoors = null) {
@@ -68,7 +68,7 @@ export function createPlanView(scene) {
     lastEstimates = new Map();
 
     for (const plan of plans) {
-      const est = estimatePlan(map, plan.start, plan.waypoints, closedDoors);
+      const est = estimatePlan(map, plan.start, plan.waypoints, closedDoors, plan.released ?? []);
       lastEstimates.set(plan.soldierId, est);
       const teamColor = TEAM_COLORS[plan.team];
       const isSelSoldier = selected?.soldierId === plan.soldierId;
