@@ -231,6 +231,7 @@ export const overlays = {
       ${btn('start', '👁 Watch AI vs AI', { arg: 'aiVsAi' })}
       ${btn('start', '👥 Hotseat (2 players, 1 device)', { arg: 'hotseat' })}
       ${btn('onlineMenu', '🌐 Online (2 players)')}
+      ${btn('loadReplay', '📂 Load replay')}
       ${btn('howTo', '❓ How to play')}
       <p class="small">Tap a soldier, tap the map to add waypoints, hold to add a running one.
       Tap a waypoint to edit it, drag it to move it. Pinch / twist / drag to move the camera.</p>
@@ -328,6 +329,7 @@ export const overlays = {
     <div class="card">
       <h2>${esc(title)}</h2>
       ${btn('rewatch', '⏮ Rewatch match', { cls: 'go' })}
+      ${btn('saveReplay', '💾 Save replay')}
       ${btn('menu', 'Main menu')}
     </div>`,
 };

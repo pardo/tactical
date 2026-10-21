@@ -21,6 +21,7 @@ import { createLabels } from './ui/labels.js';
 import { createPlanning } from './ui/planning.js';
 import { startLoop } from './loop.js';
 import { createAudio } from './render/audio.js';
+import { exportReplay, validateReplay, fastForward } from './game/replay.js';
 import { hashWorld } from './sim/world.js';
 import { createSession } from './net/session.js';
 import { createTrysteroTransport, randomRoomCode } from './net/trystero.js';
@@ -178,7 +179,7 @@ function startMatch(mode, opts = {}) {
     opts.squads ?? (mode === 'aiVsAi' ? {} : mode === 'vsAI' ? { A: ui.squads.A } : { A: ui.squads.A, B: ui.squads.B });
   const mapId = opts.mapId ?? ui.mapId;
   const gameMode = opts.gameMode ?? ui.gameMode;
-  const match = createMatch({ mode, mapDef: MAPS[mapId], seed, squads, localTeam: opts.localTeam, gameMode });
+  const match = createMatch({ mode, mapDef: MAPS[mapId], mapId, seed, squads, localTeam: opts.localTeam, gameMode });
   const { map } = match;
   const half = Math.max(map.width, map.height) / 2;
   view.setShadowBounds(half + 2);
@@ -221,7 +222,52 @@ function startMatch(mode, opts = {}) {
   // The log covers a lot of a phone screen; open it by default only when spectating.
   ui.logOpen = mode === 'aiVsAi' || !matchMedia('(max-width: 700px)').matches;
   hud.overlay(null);
+  if (opts.replay) {
+    // Re-simulate the whole file now, then play it back from the start.
+    fastForward(match, opts.replay.turns, {
+      onTurn: () => onPhase(),
+      onTick: (w) => {
+        g.recorder.record(w);
+        logFrame(frames().length - 1, frames()[frames().length - 1]);
+      },
+    });
+    g.cursor = 0;
+    return;
+  }
   nextTurn();
+}
+
+function downloadReplay() {
+  const data = exportReplay(g.match);
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tactical-${data.mapId}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+function pickReplayFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    loadReplayText(await file.text());
+  };
+  input.click();
+}
+
+function loadReplayText(text) {
+  try {
+    const data = validateReplay(JSON.parse(text));
+    startMatch('replay', { seed: data.seed, squads: data.squads, mapId: data.mapId, gameMode: data.gameMode, replay: data });
+  } catch (err) {
+    hud.overlay(overlays.message('Could not load replay', err.message));
+  }
 }
 
 function endMatch() {
@@ -454,6 +500,8 @@ function onAction(action, arg) {
       return hud.overlay(overlays.online());
     case 'howTo':
       return hud.overlay(overlays.howTo());
+    case 'loadReplay':
+      return pickReplayFile();
     case 'onlineCreate':
       return enterRoom(randomRoomCode(), true);
     case 'onlineJoin': {
@@ -529,6 +577,9 @@ function onAction(action, arg) {
       break;
     case 'acceptHandoff':
       g.match.acceptHandoff();
+      break;
+    case 'saveReplay':
+      downloadReplay();
       break;
     case 'rewatch':
       g.overShown = true;
@@ -829,4 +880,6 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 }
 
 // Dev-only handle for headless browser tests.
-if (import.meta.env.DEV) window.__tactical = { view, get game() { return g; }, get rig() { return rig; }, ui };
+if (import.meta.env.DEV) {
+  window.__tactical = { view, ui, loadReplayText, get game() { return g; }, get rig() { return rig; } };
+}

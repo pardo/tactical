@@ -13,7 +13,8 @@ export const TEAM_NAMES = { A: 'Blue', B: 'Red' };
  * Turn flow around the deterministic sim:
  *   planning(team) → [handoff → planning(other team)] → simulating → turnEnd → planning …
  * Modes: 'vsAI' (human A vs AI B), 'aiVsAi' (spectate), 'hotseat' (two humans, one device),
- * 'online' (local human vs remote human; the remote plan arrives via setRemotePlans).
+ * 'online' (local human vs remote human; the remote plan arrives via setRemotePlans),
+ * 'replay' (no controllers: every turn is scripted through beginTurn(plans)).
  */
 /** A random legal squad, for AI teams in spectator mode (variety between matches). */
 export function randomSquad(seed) {
@@ -21,11 +22,12 @@ export function randomSquad(seed) {
   return sanitizeSquad(Array.from({ length: 12 }, () => ROLE_IDS[rng.int(0, ROLE_IDS.length)]));
 }
 
-export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A', gameMode = 'elimination' }) {
+export function createMatch({ mode, mapDef, mapId = null, seed, squads = {}, localTeam = 'A', gameMode = 'elimination' }) {
   const map = parseMap(mapDef);
   const world = createWorld(seed, map, gameMode);
   const aiSquad = (t) => (mode === 'aiVsAi' ? randomSquad(seed + (t === 'A' ? 1 : 2)) : DEFAULT_SQUAD);
-  spawnSquads(world, { A: squads.A ?? aiSquad('A'), B: squads.B ?? aiSquad('B') });
+  const finalSquads = { A: sanitizeSquad(squads.A ?? aiSquad('A')), B: sanitizeSquad(squads.B ?? aiSquad('B')) };
+  spawnSquads(world, finalSquads);
 
   const controllers =
     mode === 'aiVsAi'
@@ -34,7 +36,9 @@ export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A', 
         ? { A: 'human', B: 'ai' }
         : mode === 'online'
           ? { [localTeam]: 'human', [localTeam === 'A' ? 'B' : 'A']: 'remote' }
-          : { A: 'human', B: 'human' };
+          : mode === 'replay'
+            ? { A: 'script', B: 'script' }
+            : { A: 'human', B: 'human' };
   const ais = {};
   for (const t of TEAMS) if (controllers[t] === 'ai') ais[t] = createAI(t, seed + (t === 'A' ? 11 : 23));
 
@@ -46,6 +50,11 @@ export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A', 
   const m = {
     mode,
     gameMode,
+    mapId,
+    seed,
+    squads: finalSquads,
+    /** Every turn's plans for both teams, as simulated: enough to replay the match. */
+    history: [],
     world,
     map,
     controllers,
@@ -62,15 +71,21 @@ export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A', 
 
     /** Which team's fog of war applies; null = see everything. */
     get viewerTeam() {
-      if (mode === 'aiVsAi') return null;
+      if (mode === 'aiVsAi' || mode === 'replay') return null;
       if (mode === 'vsAI') return 'A';
       if (mode === 'online') return localTeam;
       return m.phase === 'planning' || m.phase === 'handoff' ? m.planningTeam : null;
     },
 
-    beginTurn() {
+    /** @param scripted optional { A, B } plans to play this turn as-is (replays, catching up after a reconnect) */
+    beginTurn(scripted = null) {
       m.turn++;
       m.remoteReady = false;
+      if (scripted) {
+        m.drafts = structuredClone({ A: scripted.A ?? {}, B: scripted.B ?? {} });
+        m.aiNotes = { A: {}, B: {} };
+        return m.startSim();
+      }
       for (const t of TEAMS) {
         m.drafts[t] = {};
         for (const s of world.soldiers) if (s.team === t && s.alive) m.drafts[t][s.id] = cloneWaypoints(s.orders);
@@ -115,6 +130,7 @@ export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A', 
     },
 
     startSim() {
+      m.history.push(structuredClone({ A: m.drafts.A, B: m.drafts.B }));
       for (const t of TEAMS) applyPlans(world, t, m.drafts[t]);
       beginTurnClock(world);
       m.phase = 'simulating';
