@@ -9,8 +9,8 @@ const MAX_PITCH = THREE.MathUtils.degToRad(85);
  * Tactical camera: orbits a ground target. yaw rotates around the vertical axis,
  * pitch is the angle above the horizon, distance is zoom.
  */
-export function createCameraRig(camera, { bounds = 20, distance = 26 } = {}) {
-  const home = { x: 0, z: 0, distance, yaw: 0, pitch: THREE.MathUtils.degToRad(62) };
+export function createCameraRig(camera, { bounds = 20, distance = 26, focus = { x: 0, z: 0 }, yaw = 0 } = {}) {
+  const home = { x: focus.x, z: focus.z, distance, yaw, pitch: THREE.MathUtils.degToRad(62) };
   const s = { ...home };
   const raycaster = new THREE.Raycaster();
   const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -82,11 +82,18 @@ export function createCameraRig(camera, { bounds = 20, distance = 26 } = {}) {
     apply();
   }
 
+  /** Centre the view on a ground point, keeping zoom and rotation. */
+  function focusOn(x, z) {
+    s.x = x;
+    s.z = z;
+    apply();
+  }
+
   function reset() {
     Object.assign(s, home);
     apply();
   }
 
   apply();
-  return { state: s, pan, zoom, rotate, orbit, groundAt, setViewport, reset, apply };
+  return { state: s, pan, zoom, rotate, orbit, groundAt, setViewport, reset, apply, focusOn };
 }

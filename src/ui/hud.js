@@ -94,7 +94,7 @@ export function createHud(root, onAction) {
               btn('toggleLog', '☰', { cls: logOpen ? 'on' : '', title: 'Event log' }) +
               btn('resetCamera', '⌖', { title: 'Reset camera' }) +
               btn('fullscreen', '⛶', { title: 'Fullscreen' }) +
-              btn('menu', '✕', { title: 'Quit to menu' })
+              btn('quit', '✕', { title: 'Quit to menu' })
           : btn('fullscreen', '⛶', { title: 'Fullscreen' }),
       );
     },

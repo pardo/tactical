@@ -178,7 +178,18 @@ function startMatch(mode, opts = {}) {
   const { map } = match;
   const half = Math.max(map.width, map.height) / 2;
   view.setShadowBounds(half + 2);
-  rig = createCameraRig(view.camera, { bounds: half, distance: map.width * 0.8 });
+  // Start framed on your own squad (spectators: whole map), looking toward the enemy.
+  const own = match.viewerTeam;
+  const mine = own ? match.world.soldiers.filter((s) => s.team === own) : [];
+  const focus = mine.length
+    ? { x: mine.reduce((a, s) => a + s.x, 0) / mine.length / 2, z: mine.reduce((a, s) => a + s.z, 0) / mine.length / 2 }
+    : { x: 0, z: 0 };
+  rig = createCameraRig(view.camera, {
+    bounds: half,
+    distance: map.width * (mine.length ? 0.65 : 0.8),
+    focus,
+    yaw: own === 'B' ? Math.PI : 0,
+  });
   rig.setViewport(viewW, viewH);
 
   g = {
@@ -198,10 +209,13 @@ function startMatch(mode, opts = {}) {
     overShown: false,
     watchSelected: null,
     netMessage: null,
+    confirm: null,
   };
   ui.paused = false;
   ui.speed = 1;
   ui.showCones = mode === 'aiVsAi';
+  // The log covers a lot of a phone screen; open it by default only when spectating.
+  ui.logOpen = mode === 'aiVsAi' || !matchMedia('(max-width: 700px)').matches;
   hud.overlay(null);
   nextTurn();
 }
@@ -406,6 +420,19 @@ function onAction(action, arg) {
     }
     case 'startMatch':
       return startMatch(arg);
+    case 'quit':
+      if (g && g.match.phase !== 'over') {
+        g.confirm = overlays.message(
+          'Quit match?',
+          'The match will be lost.',
+          '<button data-action="menu" class="go">Quit</button><button data-action="resume">Keep playing</button>',
+        );
+        return;
+      }
+      return onAction('menu');
+    case 'resume':
+      if (g) g.confirm = null;
+      return;
     case 'menu':
       endMatch();
       leaveRoom();
@@ -499,11 +526,19 @@ function onAction(action, arg) {
         g.match.drafts[team] = net.session.commit(g.match.turn, g.match.drafts[team]);
       }
       g.match.confirm();
+      navigator.vibrate?.(25);
       onPhase();
       break;
-    case 'select':
-      P.selectSoldier(Number(arg));
+    case 'select': {
+      // Tapping the already-selected soldier's chip centres the camera on them.
+      const id = Number(arg);
+      if (P.state.selectedId === id) {
+        const s = soldierOf(id);
+        if (s) rig.focusOn(s.x, s.z);
+      }
+      P.selectSoldier(id);
       break;
+    }
     case 'undo':
       P.undo();
       break;
@@ -578,7 +613,9 @@ function updateHud() {
     live,
   });
 
-  if (g.netMessage) {
+  if (g.confirm) {
+    hud.overlay(g.confirm);
+  } else if (g.netMessage) {
     hud.overlay(g.netMessage);
   } else if (match.phase === 'handoff') {
     hud.overlay(overlays.handoff(TEAM_NAMES[match.planningTeam]));
