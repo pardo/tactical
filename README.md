@@ -10,9 +10,17 @@ cover and turn toward threats, so *how* you move (holding an angle vs. running i
 ## Play
 
 - **vs AI**, **AI vs AI** (spectate, with full-match replay and an event log), **Hotseat**
-  (two players, one device) and **Online** (peer-to-peer, share a room code or link).
-- Maps: Killhouse, Warehouse, Embassy, Streets (all point-symmetric). Modes: Elimination, Hold the zone.
+  (two players, one device) and **Online** (peer-to-peer: share a room code or link; a guest who
+  drops or reloads rejoins mid-match).
+- Maps: Killhouse, Warehouse, Embassy, Streets (all point-symmetric) plus your own from the
+  **map editor** (touch painting, auto-mirrored for fairness, live validation, export/import).
+- Modes: Elimination, Hold the zone. Optional planning clock (default 90 s online).
 - Roles: Rifleman, Machine gunner, Sniper, Breacher, Demolition.
+- Orders per waypoint: walk/run, fire at will / return fire / hold fire, look while moving, and on
+  arrival take cover, crouch/stand, face, wait, sync to a moment of the turn, frag/flash/smoke,
+  breach a door.
+- Doors, breach charges, destructible low cover, suppression, flashbang blindness, smoke.
+- Save any match as a replay file (a few KB) and load it to rewatch.
 - Installable as an app (PWA) from the browser menu when served over https.
 
 ## Develop
@@ -20,8 +28,9 @@ cover and turn toward threats, so *how* you move (holding an angle vs. running i
 ```sh
 npm install
 npm run dev      # http://localhost:5173 (also on your LAN for phones)
-npm test         # Vitest: sim, AI, netcode, planning (headless)
-npm run e2e      # browser smoke tests (needs `npm run dev` running and playwright-cli)
+npm test         # Vitest: sim, AI, netcode, planning, maps (headless)
+npm run check    # lint + unit tests + production build
+npm run e2e      # browser tests on a phone-sized page (needs `npm run dev` and playwright-cli)
 npm run build    # static site in dist/
 ```
 

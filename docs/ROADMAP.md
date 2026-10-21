@@ -1,6 +1,6 @@
 # Tactical — Roadmap
 
-> **Status (2026-10-22):** M0–M8 playable and tested; M9/M10 partially done. Unchecked items below are what remains.
+> **Status (2026-10-22):** M0–M8 done, M9/M10 mostly done. 90 unit tests + 6 browser e2e tests. Unchecked items below are what remains.
 
 Simultaneous-turn tactical squad shooter in the browser (Door Kickers × Frozen Synapse).
 Both players plan freely, confirm, then the world simulates **5 seconds**. Soldiers execute
@@ -140,7 +140,7 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
   - spot time depends on distance, target stance/speed, inside vs outside facing arc
   - reaction time by state: holding angle ≈ 0.15 s · walking ≈ 0.4 s · running ≈ 0.8 s · +turn time if outside arc
 - [x] Combat: turn-to-aim speed, hit chance (range, movement, stance, suppression, cover), damage, simultaneous deaths
-- [x] Fire modes: fire at will / hold fire (return-fire-only not built)
+- [x] Fire modes: fire at will / return fire / hold fire
 - [x] Hotseat: P1 plans, handoff screen, P2 plans, simulate, both review
 - [x] Win condition: elimination; 30-turn limit draw
 - [x] Replay/scrub of the whole match (per-tick snapshots), speed control
@@ -167,10 +167,10 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 - [x] Doors: closed → open by walking through, or breach charge (stuns/wounds behind door). No locked/kick yet
 - [x] Action triggers: throw at waypoint ("throw when enemy spotted" not built)
 - [x] **Go-codes** — built as "Sync": hold until T seconds into the turn, for synchronised entries
-- [ ] Destructible low cover (demolition)
+- [x] Destructible low cover (frag blasts)
 
 ### M6 — Smarter autonomy
-- [ ] Take cover order: find nearest valid cover point relative to known threats
+- [x] Take cover order: nearest low cover facing the threat (or facing direction), crouch
 - [x] Auto-crouch when pinned by suppression
 - [ ] Under fire behavior per soldier "doctrine": `hold position` / `return fire` / `seek cover`
 - [x] Target priority: least turning, then closest
@@ -185,23 +185,23 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
   2. when both committed, reveal full plans
   3. verify hashes, run `runTurn(state, planA, planB, seed+turn)`
   4. exchange resulting state hash → mismatch = desync banner + log dump
-- [ ] Planning timer synced (host-authoritative clock)
-- [ ] Disconnect/reconnect: rejoin with full state snapshot from peer
-- [ ] Chat + ping/emotes
+- [x] Planning clock (45/90/120 s, host sets it online; auto-confirms when it runs out)
+- [x] Disconnect/reconnect: host sends the plan history, the guest re-simulates and continues
+- [x] Quick emotes (fixed list; no free-text chat)
 - [x] Known limitation: both clients hold full state → fog of war is client-side (fine for friendly play; see M10)
 
 ### M8 — Content & modes
 - [x] 4 maps: Killhouse, Warehouse, Embassy, Streets (point-symmetric, validated by tests)
-- [ ] In-browser map editor (paint tiles, place doors/cover/spawns, export JSON)
+- [x] In-browser map editor (touch painting, auto-mirrored, live validation, save/export/import, test-play)
 - [x] Modes: Elimination, Hold the Zone (Attack/Defend not built)
 - [ ] Asymmetric deployment: defenders get pre-placement phase
 
 ### M9 — Presentation & feel
-- [ ] Low-poly soldier models + animations (idle, walk, run, crouch, aim, fire, die) — GLTF
+- [x] Low-poly soldier models (procedural, no GLTF) with walk, crouch and death animation
 - [x] Tracers, explosions, flash bursts, smoke clouds (no muzzle flash/decals yet)
 - [x] Audio: synthesised positional gunshots/explosions/doors/reloads (no footsteps or voice barks)
 - [ ] Replay camera follow + slow-mo kill cam
-- [ ] Full-match replay export/import (plans + seed = tiny file)
+- [x] Full-match replay export/import (plans + seed = tiny file)
 - [x] How-to-play screen (no interactive tutorial)
 - [ ] UI polish, keybinds, settings, accessibility (colorblind team colors)
 
