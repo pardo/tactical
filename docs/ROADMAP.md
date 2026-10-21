@@ -81,11 +81,11 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 ## 2. Milestones
 
 ### M0 — Foundations (repo & tooling)
-- [ ] git repo, `.gitignore`
-- [ ] Vite project, ESLint + Prettier, Vitest
-- [ ] Rapier (`@dimforge/rapier3d-deterministic-compat`) loads in browser and tests
-- [ ] Folder skeleton per §1, `npm run dev / test / build`
-- [ ] Seeded RNG + fixed-step loop + test harness
+- [x] git repo, `.gitignore`
+- [x] Vite project, ESLint + Prettier, Vitest
+- [x] Rapier (`@dimforge/rapier3d-deterministic-compat`) loads in browser and tests
+- [x] Folder skeleton per §1, `npm run dev / test / build`
+- [x] Seeded RNG + fixed-step loop + test harness
 
 **Done when:** `npm run dev` shows an empty Three.js scene; `npm test` passes a determinism smoke test.
 
