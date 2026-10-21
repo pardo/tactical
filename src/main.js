@@ -20,6 +20,7 @@ import { createHud, overlays, actionLabel } from './ui/hud.js';
 import { createLabels } from './ui/labels.js';
 import { createPlanning } from './ui/planning.js';
 import { startLoop } from './loop.js';
+import { createAudio } from './render/audio.js';
 import { hashWorld } from './sim/world.js';
 import { createSession } from './net/session.js';
 import { createTrysteroTransport, randomRoomCode } from './net/trystero.js';
@@ -49,6 +50,9 @@ try {
 }
 const marker = createTapMarker(view.scene);
 const keyboard = createKeyboard();
+const audio = createAudio();
+// Browsers only start audio from a user gesture.
+window.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
 const labels = createLabels(document.getElementById('ui'));
 const hud = createHud(document.getElementById('ui'), onAction);
 let viewW = 1;
@@ -260,7 +264,7 @@ function onPhase() {
 function advance() {
   if (!atLive()) {
     g.cursor++;
-    g.fx.play(frames()[g.cursor]);
+    playFrame(frames()[g.cursor]);
     return true;
   }
   if (g.match.phase !== 'simulating') return false;
@@ -269,8 +273,17 @@ function advance() {
   g.cursor++;
   const frame = frames()[g.cursor];
   logFrame(g.cursor, frame);
-  g.fx.play(frame);
+  playFrame(frame);
   return true;
+}
+
+/** Effects and sounds for a frame we are playing through (not when scrubbing). */
+function playFrame(frame) {
+  g.fx.play(frame);
+  if (ui.speed <= 2) {
+    const r = rig.state;
+    audio.play(frame, { x: r.x, z: r.z, yaw: r.yaw, range: r.distance });
+  }
 }
 
 function turnTime(i) {
@@ -480,6 +493,9 @@ function onAction(action, arg) {
     case 'toggleLog':
       ui.logOpen = !ui.logOpen;
       break;
+    case 'toggleMute':
+      audio.toggleMute();
+      break;
     case 'resetCamera':
       rig.reset();
       break;
@@ -603,7 +619,7 @@ function updateHud() {
   else status = `Turn ${match.turn} · ${(g.match.turnTick / TICK_RATE).toFixed(1)}s / ${(TURN_TICKS / TICK_RATE).toFixed(0)}s`;
   const zone = frame.objective ? ` · zone ${frame.objective.score.A.toFixed(0)}–${frame.objective.score.B.toFixed(0)}/${match.world.objective.needed}s` : '';
   hud.status(`${status}\nBlue ${alive('A')} · Red ${alive('B')}${zone}`);
-  hud.buttons({ ...ui, inMatch: true });
+  hud.buttons({ ...ui, muted: audio.muted, inMatch: true });
   hud.log(visibleLog(), ui.logOpen);
   hud.timeline({
     visible: frames().length > 1,

@@ -82,16 +82,17 @@ export function createHud(root, onAction) {
       if (els.hint.textContent !== text) els.hint.textContent = text;
     },
 
-    buttons({ paused, speed, showCones, showPlans, logOpen, inMatch }) {
+    buttons({ paused, speed, showCones, showPlans, logOpen, muted, inMatch }) {
       set(
         'buttons',
-        JSON.stringify(arguments[0]),
+        JSON.stringify([paused, speed, showCones, showPlans, logOpen, muted, inMatch]),
         inMatch
           ? btn('togglePause', paused ? '▶' : '⏸', { title: 'Play / pause' }) +
               btn('cycleSpeed', `${speed}×`, { title: 'Playback speed' }) +
               btn('toggleCones', '👁', { cls: showCones ? 'on' : '', title: 'Vision cones' }) +
               btn('togglePlans', '⤳', { cls: showPlans ? 'on' : '', title: 'Show plans' }) +
               btn('toggleLog', '☰', { cls: logOpen ? 'on' : '', title: 'Event log' }) +
+              btn('toggleMute', muted ? '🔇' : '🔊', { title: 'Sound' }) +
               btn('resetCamera', '⌖', { title: 'Reset camera' }) +
               btn('fullscreen', '⛶', { title: 'Fullscreen' }) +
               btn('quit', '✕', { title: 'Quit to menu' })
