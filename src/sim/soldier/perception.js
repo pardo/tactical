@@ -21,7 +21,7 @@ export function canSee(world, s, e) {
 export function updatePerception(world) {
   for (const s of world.soldiers) {
     s.visible = [];
-    if (!s.alive) continue;
+    if (!s.alive || s.blind > 0) continue;
     for (const e of world.soldiers) {
       if (e.alive && e.team !== s.team && canSee(world, s, e)) s.visible.push(e.id);
     }

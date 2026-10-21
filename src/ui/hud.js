@@ -2,7 +2,9 @@
  * DOM overlay. Buttons carry data-action / data-arg; clicks are delegated to
  * onAction(action, arg). Each section only re-renders when its content key changes.
  */
-const ICON = { stance: { crouch: '▼ Crouch', stand: '▲ Stand' }, face: '➜ Face', wait: '⏱ Wait', grenade: '💣 Grenade' };
+const ICON = { stance: { crouch: '▼ Crouch', stand: '▲ Stand' }, face: '➜ Face', wait: '⏱ Wait' };
+export const GRENADE_ICON = { frag: '💣', flash: '⚡', smoke: '☁' };
+const GRENADE_NAME = { frag: 'Frag', flash: 'Flash', smoke: 'Smoke' };
 
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -14,8 +16,15 @@ const btn = (action, label, { arg = '', cls = '', title = '', disabled = false }
 export function actionLabel(a) {
   if (a.type === 'stance') return ICON.stance[a.stance];
   if (a.type === 'wait') return `${ICON.wait} ${a.t}s`;
+  if (a.type === 'grenade') return `${GRENADE_ICON[a.kind]} ${GRENADE_NAME[a.kind]}`;
   return ICON[a.type] ?? a.type;
 }
+
+const gearText = (gear) =>
+  Object.entries(gear)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${GRENADE_ICON[k]}${n}`)
+    .join(' ') || 'no grenades';
 
 export function createHud(root, onAction) {
   root.innerHTML = `
@@ -128,7 +137,7 @@ export function createHud(root, onAction) {
       }
       const chips = model.soldiers
         .map((s) =>
-          btn('select', `<b>${esc(s.num)}</b><i style="--hp:${s.hp}%"></i>${s.wps ? `<small>${s.wps}</small>` : ''}`, {
+          btn('select', `<b>${esc(s.num)}</b><em>${esc(s.role)}</em><i style="--hp:${s.hp}%"></i>${s.wps ? `<small>${s.wps}</small>` : ''}`, {
             arg: s.id,
             cls: `chip team-${s.team} ${s.selected ? 'sel' : ''} ${s.alive ? '' : 'dead'}`,
             disabled: !s.alive,
@@ -152,7 +161,7 @@ export function createHud(root, onAction) {
         return set(
           'panel',
           JSON.stringify(model),
-          `<div class="row info">${esc(model.label)} · HP ${model.hp} · 💣 ${model.grenades} · ${model.wps} waypoint${model.wps === 1 ? '' : 's'}</div>
+          `<div class="row info">${esc(model.label)} · ${esc(model.weapon)} · HP ${model.hp} · ${gearText(model.gear)} · ${model.wps} waypoint${model.wps === 1 ? '' : 's'}</div>
            <div class="row">${btn('clearPlan', '🗑 Clear plan', { disabled: !model.wps })}${btn('holdHere', '▼ Hold here (crouch)')}</div>`,
         );
       }
@@ -173,7 +182,10 @@ export function createHud(root, onAction) {
            ${btn('addStance', '▼ Crouch', { arg: 'crouch' })}${btn('addStance', '▲ Stand', { arg: 'stand' })}
            ${btn('pick', '➜ Face…', { arg: 'face', cls: model.pickMode === 'face' ? 'on' : '' })}
            ${btn('addWait', '⏱ +1s')}
-           ${btn('pick', '💣 Grenade…', { arg: 'grenade', cls: model.pickMode === 'grenade' ? 'on' : '', disabled: model.grenades <= 0 })}
+           ${['frag', 'flash', 'smoke']
+             .filter((k) => model.gear[k] > 0)
+             .map((k) => btn('pick', `${GRENADE_ICON[k]} ${GRENADE_NAME[k]} ×${model.gear[k]}…`, { arg: `grenade:${k}`, cls: model.pickMode === `grenade:${k}` ? 'on' : '' }))
+             .join('')}
            ${btn('pick', '👁 Look while moving…', { arg: 'look', cls: model.pickMode === 'look' ? 'on' : '' })}
            ${btn('deleteWaypoint', '🗑', { cls: 'danger', title: 'Delete waypoint' })}
          </div>
@@ -191,6 +203,16 @@ export function createHud(root, onAction) {
   };
 }
 
+const ROLE_HELP = [
+  'RF Rifleman: all-rounder, one of each grenade',
+  'MG Machine gunner: suppresses (slows enemy aim and reactions), poor on the move',
+  'SN Sniper: one-shot kills, lightning fast holding an angle, awful moving',
+  'BR Breacher: shotgun, 2 flashbangs, breach charges',
+  'DM Demolition: 3 frags, smoke, carbine',
+]
+  .map((l) => `<div>${esc(l)}</div>`)
+  .join('');
+
 export const overlays = {
   menu: () => `
     <div class="card">
@@ -201,6 +223,22 @@ export const overlays = {
       ${btn('start', '👥 Hotseat (2 players, 1 device)', { arg: 'hotseat' })}
       <p class="small">Tap a soldier, tap the map to add waypoints, hold to add a running one.
       Tap a waypoint to edit it, drag it to move it. Pinch / twist / drag to move the camera.</p>
+    </div>`,
+  /** @param teams [{ team, name, squad: [{ role, label, short }] }] */
+  squad: (teams, mode) => `
+    <div class="card">
+      <h2>Choose your squad</h2>
+      <p class="small">Tap a slot to change its role. Max 1 sniper and 1 machine gunner.</p>
+      ${teams
+        .map(
+          (t) => `<div class="squad team-${t.team}"><b>${esc(t.name)}</b><div class="slots">${t.squad
+            .map((r, i) => btn('cycleRole', `<span>${esc(r.short)}</span><small>${esc(r.label)}</small>`, { arg: `${t.team}:${i}`, cls: 'slot' }))
+            .join('')}</div></div>`,
+        )
+        .join('')}
+      <div class="roles small">${ROLE_HELP}</div>
+      ${btn('startMatch', 'Deploy ▶', { arg: mode, cls: 'go' })}
+      ${btn('menu', 'Back')}
     </div>`,
   handoff: (teamName) => `
     <div class="card">

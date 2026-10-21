@@ -3,6 +3,8 @@ import { createWorld, spawnSquads, applyPlans, step, TEAMS } from '../sim/world.
 import { cloneWaypoints } from '../sim/plan.js';
 import { TURN_TICKS } from '../sim/constants.js';
 import { createAI } from '../ai/planner.js';
+import { createRng } from '../sim/rng.js';
+import { DEFAULT_SQUAD, ROLE_IDS, sanitizeSquad } from '../sim/roles.js';
 
 export const MAX_TURNS = 30;
 export const TEAM_NAMES = { A: 'Blue', B: 'Red' };
@@ -12,10 +14,17 @@ export const TEAM_NAMES = { A: 'Blue', B: 'Red' };
  *   planning(team) → [handoff → planning(other team)] → simulating → turnEnd → planning …
  * Modes: 'vsAI' (human A vs AI B), 'aiVsAi' (spectate), 'hotseat' (two humans, one device).
  */
-export function createMatch({ mode, mapDef, seed }) {
+/** A random legal squad, for AI teams in spectator mode (variety between matches). */
+export function randomSquad(seed) {
+  const rng = createRng(seed);
+  return sanitizeSquad(Array.from({ length: 12 }, () => ROLE_IDS[rng.int(0, ROLE_IDS.length)]));
+}
+
+export function createMatch({ mode, mapDef, seed, squads = {} }) {
   const map = parseMap(mapDef);
   const world = createWorld(seed, map);
-  spawnSquads(world);
+  const aiSquad = (t) => (mode === 'aiVsAi' ? randomSquad(seed + (t === 'A' ? 1 : 2)) : DEFAULT_SQUAD);
+  spawnSquads(world, { A: squads.A ?? aiSquad('A'), B: squads.B ?? aiSquad('B') });
 
   const controllers =
     mode === 'aiVsAi' ? { A: 'ai', B: 'ai' } : mode === 'vsAI' ? { A: 'human', B: 'ai' } : { A: 'human', B: 'human' };

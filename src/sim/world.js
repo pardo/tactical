@@ -9,6 +9,7 @@ import { updateOrders } from './soldier/orders.js';
 import { updateGrenades } from './grenades.js';
 import { sanitizeWaypoints } from './plan.js';
 import { PI } from './fmath.js';
+import { DEFAULT_SQUAD, sanitizeSquad } from './roles.js';
 
 // Physical heights, used for line of sight. The renderer draws walls shorter for readability.
 export const WALL_HEIGHT = 2.4;
@@ -25,7 +26,18 @@ export function createWorld(seed, map) {
   addMapColliders(physics, map);
   // Build the query structures so line-of-sight works before the first tick.
   physics.step();
-  return { tick: 0, rng: createRng(seed), physics, map, soldiers: [], grenades: [], events: [], winner: null, nextId: 1 };
+  return {
+    tick: 0,
+    rng: createRng(seed),
+    physics,
+    map,
+    soldiers: [],
+    grenades: [],
+    smokes: [],
+    events: [],
+    winner: null,
+    nextId: 1,
+  };
 }
 
 /** One cuboid per horizontal run of identical tiles keeps the collider count low. */
@@ -52,12 +64,14 @@ function addMapColliders(physics, map) {
   }
 }
 
-export function spawnSquads(world, perTeam = 4) {
+/** @param squads { A: roleId[], B: roleId[] } */
+export function spawnSquads(world, squads = { A: DEFAULT_SQUAD, B: DEFAULT_SQUAD }) {
   for (const team of TEAMS) {
     const cells = world.map.spawns[team];
-    for (let i = 0; i < Math.min(perTeam, cells.length); i++) {
+    const roles = sanitizeSquad(squads[team]);
+    for (let i = 0; i < Math.min(roles.length, cells.length); i++) {
       const c = cellCenter(world.map, cells[i].cx, cells[i].cz);
-      createSoldier(world, { team, x: c.x, z: c.z, heading: team === 'A' ? PI / 2 : -PI / 2 });
+      createSoldier(world, { team, role: roles[i], x: c.x, z: c.z, heading: team === 'A' ? PI / 2 : -PI / 2 });
     }
   }
 }
@@ -123,7 +137,8 @@ export function hashWorld(world) {
   for (const g of world.grenades) {
     const p = g.body.translation();
     const v = g.body.linvel();
-    h.num(g.id).num(g.fuse).num(p.x).num(p.y).num(p.z).num(v.x).num(v.y).num(v.z);
+    h.num(g.id).str(g.kind).num(g.fuse).num(p.x).num(p.y).num(p.z).num(v.x).num(v.y).num(v.z);
   }
+  for (const s of world.smokes) h.num(s.x).num(s.z).num(s.r).num(s.until);
   return h.digest();
 }

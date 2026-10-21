@@ -11,7 +11,7 @@
  *     actions: [ { type: 'stance', stance: 'stand' | 'crouch' }
  *              | { type: 'face', x, z }
  *              | { type: 'wait', t }  // seconds
- *              | { type: 'grenade', x, z } ] }
+ *              | { type: 'grenade', kind: 'frag' | 'flash' | 'smoke', x, z } ] }
  */
 export const MAX_WAYPOINTS = 16;
 export const MAX_ACTIONS = 6;
@@ -19,6 +19,7 @@ export const MAX_WAIT = 10;
 export const MOVE_MODES = ['walk', 'run'];
 export const FIRE_MODES = ['onSight', 'hold'];
 export const STANCES = ['stand', 'crouch'];
+export const GRENADE_KINDS = ['frag', 'flash', 'smoke'];
 
 export function makeWaypoint(x, z, prev = null) {
   return { x, z, move: prev?.move ?? 'walk', fire: prev?.fire ?? 'onSight', look: null, actions: [] };
@@ -49,8 +50,9 @@ export function sanitizeWaypoints(map, waypoints) {
           case 'stance':
             return { type: 'stance', stance: oneOf(a.stance, STANCES) };
           case 'face':
+            return { type: 'face', x: cx(a.x), z: cz(a.z) };
           case 'grenade':
-            return { type: a.type, x: cx(a.x), z: cz(a.z) };
+            return { type: 'grenade', kind: oneOf(a.kind, GRENADE_KINDS), x: cx(a.x), z: cz(a.z) };
           case 'wait':
             return { type: 'wait', t: Math.min(MAX_WAIT, Math.max(0, finite(a.t, 1))) };
           default:

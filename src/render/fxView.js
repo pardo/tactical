@@ -21,12 +21,18 @@ export function createFxView(scene) {
     live.push({ obj: line, age: 0, life: 0.12, update: (t) => (mat.opacity = 1 - t) });
   }
 
+  const smokeMeshes = [];
+  const smokeGeo = new THREE.SphereGeometry(1, 16, 10);
+  const smokeMat = new THREE.MeshLambertMaterial({ color: 0xb8bcc2, transparent: true, opacity: 0.82, depthWrite: false });
+
   function explosion(e) {
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, depthWrite: false });
+    if (e.kind === 'smoke') return; // drawn from frame state instead (it lingers)
+    const color = e.kind === 'flash' ? 0xffffff : 0xffa040;
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false });
     const ball = new THREE.Mesh(blastGeo, mat);
     ball.position.set(e.x, Math.max(e.y, 0.3), e.z);
     group.add(ball);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff6030, transparent: true, depthWrite: false });
+    const ringMat = new THREE.MeshBasicMaterial({ color: e.kind === 'flash' ? 0xe8f4ff : 0xff6030, transparent: true, depthWrite: false });
     const ring = new THREE.Mesh(new THREE.RingGeometry(e.radius - 0.15, e.radius, 48), ringMat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(e.x, 0.04, e.z);
@@ -51,6 +57,22 @@ export function createFxView(scene) {
         if (e.type === 'shot') tracer(e);
         else if (e.type === 'explosion') explosion(e);
       }
+    },
+
+    /** Lingering smoke clouds from the frame state. */
+    drawSmokes(frame) {
+      while (smokeMeshes.length < frame.smokes.length) {
+        const m = new THREE.Mesh(smokeGeo, smokeMat);
+        group.add(m);
+        smokeMeshes.push(m);
+      }
+      smokeMeshes.forEach((m, i) => {
+        const sm = frame.smokes[i];
+        m.visible = !!sm;
+        if (!sm) return;
+        m.position.set(sm.x, 1.2, sm.z);
+        m.scale.set(sm.r, 1.6, sm.r);
+      });
     },
 
     /** Grenades in flight, interpolated between frames. */

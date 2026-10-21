@@ -124,7 +124,8 @@ button.danger { color: #ff7a6b; }
 #bottom .bar .go { flex: 0 0 auto; min-width: 88px; min-height: 52px; font-size: 16px; }
 #bottom .bar .undo { min-height: 52px; font-size: 20px; }
 .chip { position: relative; min-width: 52px; min-height: 52px; padding: 0 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; }
-.chip b { font-size: 18px; }
+.chip b { font-size: 16px; line-height: 1; }
+.chip em { font-style: normal; font-size: 10px; color: var(--muted); line-height: 1; }
 .chip i { display: block; width: 32px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, #5ee07a var(--hp), #333 var(--hp)); }
 .chip small { position: absolute; top: 2px; right: 4px; font-size: 10px; color: var(--muted); }
 .chip.team-A { border-color: var(--blue); }
@@ -177,3 +178,13 @@ button.danger { color: #ff7a6b; }
   #top .buttons button { min-width: 36px; min-height: 36px; padding: 0 6px; }
   #bottom .row button { padding: 0 9px; }
 }
+
+.squad { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; border: 1px solid var(--line); }
+.squad.team-A { border-color: var(--blue); }
+.squad.team-B { border-color: var(--red); }
+.squad .slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.squad .slot { min-height: 60px; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; white-space: normal; }
+.squad .slot span { font-size: 18px; font-weight: 700; }
+.squad .slot small { font-size: 10px; color: var(--muted); }
+.card .roles { text-align: left; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+.card { max-height: calc(100dvh - 32px); overflow-y: auto; }

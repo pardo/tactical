@@ -3,6 +3,7 @@ import { headingTo, wrapAngle, length, PI } from '../fmath.js';
 import { findPath } from '../nav.js';
 import { turnToward } from './soldier.js';
 import { throwGrenade } from '../grenades.js';
+import { ROLES } from '../roles.js';
 
 export const SPEED = { walk: 1.6, run: 3.6, crouch: 0.9, engaged: 1.0 }; // m/s
 const TURN_RATE = { walk: 7, run: 5 }; // rad/s
@@ -19,9 +20,12 @@ function advance(s) {
 }
 
 function speedFor(s, engaged) {
-  if (engaged) return SPEED.engaged;
-  if (s.moveMode === 'run') return SPEED.run;
-  return s.stance === 'crouch' ? SPEED.crouch : SPEED.walk;
+  let base;
+  if (engaged) base = SPEED.engaged;
+  else if (s.moveMode === 'run') base = SPEED.run;
+  else base = s.stance === 'crouch' ? SPEED.crouch : SPEED.walk;
+  // Pinned down or blinded soldiers crawl.
+  return base * ROLES[s.role].speed * (1 - 0.35 * s.suppression) * (s.blind > 0 ? 0.4 : 1);
 }
 
 function moveAlongPath(s, wp, engaged) {
@@ -72,12 +76,12 @@ function runAction(world, s, a, engaged) {
       s.actionTimer += DT;
       return s.actionTimer >= a.t;
     case 'grenade':
-      if (s.grenades <= 0) return true;
-      if (engaged) return false;
+      if ((s.gear[a.kind] ?? 0) <= 0) return true;
+      if (engaged || s.blind > 0) return false;
       turnToward(s, headingTo(a.x - s.x, a.z - s.z), TURN_RATE.walk);
       s.actionTimer += DT;
       if (s.actionTimer < ACTION_TIME.grenade) return false;
-      throwGrenade(world, s, a.x, a.z);
+      throwGrenade(world, s, a.x, a.z, a.kind);
       return true;
     default:
       return true;

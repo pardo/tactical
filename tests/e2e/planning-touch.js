@@ -6,6 +6,11 @@ async (page) => {
   };
   await page.goto('http://localhost:5173/');
   await page.getByRole('button', { name: 'Play vs AI' }).tap();
+  // Squad screen: tap slot 2 (rifleman) once → next legal role (MG and sniper are capped, so breacher).
+  await page.locator('.slot').nth(1).tap();
+  const slot = await page.locator('.slot').nth(1).innerText();
+  if (!/BR/.test(slot)) fail(`role cycle gave "${slot}"`);
+  await page.getByRole('button', { name: 'Deploy ▶' }).tap();
   await page.waitForTimeout(300);
   const st = () =>
     page.evaluate(() => {
@@ -30,11 +35,12 @@ async (page) => {
   await page.getByRole('button', { name: '🏃 Run' }).tap();
   await page.getByRole('button', { name: '▼ Crouch' }).tap();
   await page.getByRole('button', { name: '⏱ +1s' }).tap();
-  await page.getByRole('button', { name: '💣 Grenade…' }).tap();
+  await page.getByRole('button', { name: /Flash/ }).tap();
   await page.touchscreen.tap(200, 300);
   await page.waitForTimeout(100);
   s = await st();
   const types = s.wps[0].actions.map((a) => a.type).join(',');
+  if (s.wps[0].actions[2]?.kind !== 'flash') fail('grenade kind not flash');
   if (s.wps[0].move !== 'run' || types !== 'stance,wait,grenade') fail(`bad waypoint edit: ${JSON.stringify(s.wps[0])}`);
 
   // Drag the waypoint with a finger: project it to screen, then drag 40px.

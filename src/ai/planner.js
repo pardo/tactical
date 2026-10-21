@@ -4,14 +4,17 @@ import { hasLineOfSight } from '../sim/los.js';
 import { Tile, tileAt, isWalkable, cellCenter, worldToCell } from '../sim/map.js';
 import { makeWaypoint } from '../sim/plan.js';
 import { TURN_TICKS } from '../sim/constants.js';
-import { GRENADE_RANGE, BLAST_RADIUS } from '../sim/grenades.js';
+import { GRENADE_RANGE, GRENADE } from '../sim/grenades.js';
 import { EYE_HEIGHT, BODY_HEIGHT } from '../sim/soldier/soldier.js';
 
 /**
  * Turn-based AI opponent. It only uses what its own team has seen (no wallhacks):
  * it remembers enemy sightings and plans with the same waypoint format as a human.
  */
-const ROLES = ['assault', 'assault', 'overwatch', 'flank'];
+/** How each soldier role behaves when no enemy is in sight. */
+const BEHAVIOUR = { breacher: 'assault', rifleman: 'assault', demolition: 'flank', lmg: 'overwatch', sniper: 'overwatch' };
+const OVERWATCH_RADIUS = { lmg: 7, sniper: 10 };
+const FLASH_RANGE = 10;
 const FORGET_AFTER = TURN_TICKS * 4;
 /** Search grid: the map is split into SECTOR×SECTOR metre cells, each remembering when we last had eyes on it. */
 const SECTOR = 4;
@@ -203,7 +206,7 @@ export function createAI(team, seed = 1) {
     const taken = [];
 
     for (const s of own) {
-      const role = ROLES[squad.indexOf(s) % ROLES.length];
+      const role = BEHAVIOUR[s.role] ?? 'assault';
       const wps = [];
       let note;
 
@@ -222,9 +225,12 @@ export function createAI(team, seed = 1) {
       } else {
         let dest;
         let spot;
-        if (role === 'overwatch') {
-          spot = findOverwatch(world, s, objective, 7, taken);
+        if (role === 'overwatch' && known.length) {
+          spot = findOverwatch(world, s, objective, OVERWATCH_RADIUS[s.role] ?? 7, taken);
           dest = spot ?? pointAlongPath(world, s, objective, 4);
+        } else if (role === 'overwatch') {
+          // Nothing to watch yet: creep forward with the search, a bit behind the assaulters.
+          dest = pointAlongPath(world, s, objective, rng.range(3, 5));
         } else if (role === 'flank') {
           const dx = objective.x - s.x;
           const dz = objective.z - s.z;
@@ -252,20 +258,24 @@ export function createAI(team, seed = 1) {
         }
       }
 
-      // Grenade a recently seen enemy we can't currently see (behind a wall or in a room).
+      // Frag (or flash, for breachers) a recently seen enemy we can't currently see.
+      const kind = s.gear.frag > 0 ? 'frag' : s.gear.flash > 0 ? 'flash' : null;
+      const maxRange = kind === 'flash' ? FLASH_RANGE : GRENADE_RANGE;
       const fresh = known.filter((k) => world.tick - k.tick <= TURN_TICKS * 2);
-      const nade = fresh.find((k) => {
-        const d = dist(k, s);
-        if (d < 5 || d > GRENADE_RANGE || s.grenades <= 0) return false;
-        if (s.visible.includes(k.id)) return false;
-        if (world.soldiers.some((o) => o.team === team && o.alive && dist(o, k) < BLAST_RADIUS)) return false;
-        return !hasLineOfSight(world, s.x, EYE_HEIGHT.stand, s.z, k.x, 1, k.z);
-      });
+      const nade =
+        kind &&
+        fresh.find((k) => {
+          const d = dist(k, s);
+          if (d < 5 || d > maxRange) return false;
+          if (s.visible.includes(k.id)) return false;
+          if (world.soldiers.some((o) => o.team === team && o.alive && dist(o, k) < GRENADE[kind].radius)) return false;
+          return !hasLineOfSight(world, s.x, EYE_HEIGHT.stand, s.z, k.x, 1, k.z);
+        });
       if (nade && rng.next() < 0.6) {
         const wp = makeWaypoint(s.x, s.z);
-        wp.actions.push({ type: 'grenade', x: nade.x, z: nade.z });
+        wp.actions.push({ type: 'grenade', kind, x: nade.x, z: nade.z });
         wps.unshift(wp);
-        note += ` · grenade at #${nade.id}`;
+        note += ` · ${kind} at #${nade.id}`;
       }
 
       plans[s.id] = wps;

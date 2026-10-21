@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { estimatePlan } from '../plan/estimate.js';
-import { BLAST_RADIUS, GRENADE_RANGE } from '../sim/grenades.js';
+import { GRENADE, GRENADE_RANGE } from '../sim/grenades.js';
 import { TEAM_COLORS } from './soldierView.js';
 
 const RUN_COLOR = 0xffa64d;
 const BLOCKED_COLOR = 0xff4d4d;
 const LOOK_COLOR = 0xc28bff;
 const SELECTED_COLOR = 0xffd34d;
+const GRENADE_COLOR = { frag: 0xff6a4d, flash: 0xe8f4ff, smoke: 0xb8bcc2 };
 const Y = 0.06;
 
 const v = (p, y = Y) => new THREE.Vector3(p.x, y, p.z);
@@ -104,10 +105,12 @@ export function createPlanView(scene) {
             const d = Math.hypot(a.x - wp.x, a.z - wp.z);
             const k = d > GRENADE_RANGE ? GRENADE_RANGE / d : 1;
             const land = { x: wp.x + (a.x - wp.x) * k, z: wp.z + (a.z - wp.z) * k };
-            group.add(line(arc(wp, land), 0xff6a4d, 0.9));
+            const color = GRENADE_COLOR[a.kind] ?? GRENADE_COLOR.frag;
+            const radius = (GRENADE[a.kind] ?? GRENADE.frag).radius;
+            group.add(line(arc(wp, land), color, 0.9));
             const blast = new THREE.Mesh(
-              new THREE.RingGeometry(BLAST_RADIUS - 0.08, BLAST_RADIUS, 48),
-              new THREE.MeshBasicMaterial({ color: 0xff6a4d, transparent: true, opacity: 0.35, depthWrite: false }),
+              new THREE.RingGeometry(radius - 0.08, radius, 48),
+              new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false }),
             );
             blast.rotation.x = -Math.PI / 2;
             blast.position.set(land.x, 0.04, land.z);

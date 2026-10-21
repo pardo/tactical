@@ -3,6 +3,7 @@ import { initPhysics } from './sim/physics.js';
 import { TICK_RATE, TURN_TICKS, DT } from './sim/constants.js';
 import { makeWaypoint } from './sim/plan.js';
 import { createMatch, TEAM_NAMES } from './game/match.js';
+import { ROLES, WEAPONS, DEFAULT_SQUAD, cycleRole } from './sim/roles.js';
 import { createRecorder } from './game/recorder.js';
 import killhouse from './maps/killhouse.js';
 import { createScene } from './render/scene.js';
@@ -25,7 +26,9 @@ const SPEEDS = [0.5, 1, 2, 4];
 const PICK_HINTS = {
   face: 'Tap the map: where to face',
   look: 'Tap the map: what to watch while moving',
-  grenade: 'Tap the map: grenade target (max 14 m)',
+  'grenade:frag': 'Tap the map: frag target (max 14 m)',
+  'grenade:flash': 'Tap the map: flashbang target (max 14 m)',
+  'grenade:smoke': 'Tap the map: smoke target (max 14 m)',
 };
 const LOG_LINES = 10;
 
@@ -39,7 +42,24 @@ let viewW = 1;
 let viewH = 1;
 let rig = null;
 
-const ui = { paused: false, speed: 1, showCones: false, showPlans: true, logOpen: true, auto: true };
+const ui = {
+  paused: false,
+  speed: 1,
+  showCones: false,
+  showPlans: true,
+  logOpen: true,
+  auto: true,
+  squads: { A: [...DEFAULT_SQUAD], B: [...DEFAULT_SQUAD] },
+};
+
+function squadOverlay(mode) {
+  const teams = (mode === 'hotseat' ? ['A', 'B'] : ['A']).map((team) => ({
+    team,
+    name: TEAM_NAMES[team],
+    squad: ui.squads[team].map((r) => ({ role: r, label: ROLES[r].label, short: ROLES[r].short })),
+  }));
+  return overlays.squad(teams, mode);
+}
 
 /** Everything belonging to the current match. */
 let g = null;
@@ -47,7 +67,8 @@ let g = null;
 function startMatch(mode) {
   endMatch();
   const seed = (Math.random() * 2 ** 31) >>> 0;
-  const match = createMatch({ mode, mapDef: killhouse, seed });
+  const squads = mode === 'aiVsAi' ? {} : mode === 'vsAI' ? { A: ui.squads.A } : { A: ui.squads.A, B: ui.squads.B };
+  const match = createMatch({ mode, mapDef: killhouse, seed, squads });
   const { map } = match;
   const half = Math.max(map.width, map.height) / 2;
   view.setShadowBounds(half + 2);
@@ -149,7 +170,11 @@ function logFrame(i, frame) {
     } else if (e.type === 'death') {
       g.log.push({ i, team: null, cls: 'kill', text: `${ts} ☠ ${L[e.id]} down` });
     } else if (e.type === 'throw') {
-      g.log.push({ i, team: team(e.id), cls: team(e.id), text: `${ts} ${L[e.id]} throws a grenade` });
+      g.log.push({ i, team: team(e.id), cls: team(e.id), text: `${ts} ${L[e.id]} throws a ${e.kind}` });
+    } else if (e.type === 'blinded') {
+      g.log.push({ i, team: null, cls: team(e.id), text: `${ts} ${L[e.id]} blinded ${e.duration.toFixed(1)}s` });
+    } else if (e.type === 'reload') {
+      g.log.push({ i, team: team(e.id), cls: team(e.id), text: `${ts} ${L[e.id]} reloading` });
     }
   }
 }
@@ -246,6 +271,15 @@ function onAction(action, arg) {
   const P = g?.planning;
   switch (action) {
     case 'start':
+      if (arg === 'aiVsAi') return startMatch(arg);
+      ui.pendingMode = arg;
+      return hud.overlay(squadOverlay(arg));
+    case 'cycleRole': {
+      const [team, i] = arg.split(':');
+      ui.squads[team] = cycleRole(ui.squads[team], Number(i));
+      return hud.overlay(squadOverlay(ui.pendingMode));
+    }
+    case 'startMatch':
       return startMatch(arg);
     case 'menu':
       endMatch();
@@ -404,7 +438,8 @@ function updateHud() {
         team,
         num: match.labels[s.id].split(' ')[1],
         label: match.labels[s.id],
-        hp: Math.max(0, Math.round(s.hp)),
+        hp: Math.max(0, Math.round((100 * s.hp) / s.maxHp)),
+        role: ROLES[s.role].short,
         alive: s.alive,
         selected: s.id === P.state.selectedId,
         wps: P.state.drafts[s.id]?.length ?? 0,
@@ -421,16 +456,17 @@ function updateHud() {
         index: P.state.wpIndex,
         count: P.state.drafts[s.id].length,
         eta: mark ? (Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : 'unreachable') : '–',
-        grenades: s.grenades,
+        gear: s.gear,
         pickMode: P.state.pickMode,
         wp: w,
       });
     } else if (s) {
       hud.panel({
         kind: 'soldier',
-        label: match.labels[s.id],
+        label: `${match.labels[s.id]} · ${ROLES[s.role].label}`,
+        weapon: `${WEAPONS[s.weapon].label} ${s.ammo}/${WEAPONS[s.weapon].mag}`,
         hp: Math.max(0, Math.round(s.hp)),
-        grenades: s.grenades,
+        gear: s.gear,
         wps: P.state.drafts[s.id]?.length ?? 0,
       });
     } else hud.panel(null);
@@ -543,6 +579,7 @@ startLoop({
       const selectedId = editing() ? g.planning.state.selectedId : g.watchSelected;
       g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones });
       g.fx.drawGrenades(prev, curr, a);
+      g.fx.drawSmokes(curr);
       g.fx.update(dt);
       drawPlans();
       updateHud();

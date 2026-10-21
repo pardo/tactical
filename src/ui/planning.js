@@ -146,7 +146,7 @@ export function createPlanning(map) {
       st.wpIndex = null;
     },
 
-    /** 'face' | 'look' | 'grenade': the next map tap supplies the target point. */
+    /** 'face' | 'look' | 'grenade:<kind>': the next map tap supplies the target point. */
     startPick(mode) {
       if (wp()) st.pickMode = mode;
     },
@@ -165,6 +165,7 @@ export function createPlanning(map) {
         w.look = { x, z };
         return true;
       }
+      if (mode.startsWith('grenade:')) return api.addAction({ type: 'grenade', kind: mode.slice(8), x, z });
       return api.addAction({ type: mode, x, z });
     },
 

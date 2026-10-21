@@ -42,12 +42,12 @@ describe('planning', () => {
     p.addAction({ type: 'stance', stance: 'crouch' });
     p.addAction({ type: 'wait', t: 1 });
     p.addAction({ type: 'wait', t: 1 });
-    p.startPick('grenade');
+    p.startPick('grenade:frag');
     p.applyPick(5, 0);
     expect(drafts[1][0].actions).toEqual([
       { type: 'stance', stance: 'crouch' },
       { type: 'wait', t: 2 },
-      { type: 'grenade', x: 5, z: 0 },
+      { type: 'grenade', kind: 'frag', x: 5, z: 0 },
     ]);
     p.undo();
     expect(drafts[1][0].actions).toHaveLength(2);

@@ -1,5 +1,6 @@
 import { DT } from '../constants.js';
 import { wrapAngle } from '../fmath.js';
+import { ROLES, WEAPONS } from '../roles.js';
 
 export const MAX_HP = 100;
 export const EYE_HEIGHT = { stand: 1.6, crouch: 1.1 };
@@ -8,18 +9,26 @@ export const BODY_HEIGHT = { stand: 1.3, crouch: 1.05 };
 export const LEGS_HEIGHT = 0.5;
 
 export function createSoldier(world, { team, x, z, heading = 0, role = 'rifleman' }) {
+  const r = ROLES[role] ?? ROLES.rifleman;
   const soldier = {
     id: world.nextId++,
     kind: 'soldier',
     team,
     role,
+    weapon: r.weapon,
     x,
     z,
     heading,
     stance: 'stand',
-    hp: MAX_HP,
+    hp: r.hp,
+    maxHp: r.hp,
     alive: true,
-    grenades: 2,
+    gear: { ...r.gear },
+    charges: r.charges,
+    ammo: WEAPONS[r.weapon].mag,
+    reloadTimer: 0,
+    suppression: 0, // 0..1, from incoming fire
+    blind: 0, // seconds left blinded by a flashbang
     // Orders: orders[0] is the current waypoint.
     orders: [],
     path: [],

@@ -1,18 +1,22 @@
-import { DT } from './constants.js';
 import { RAPIER } from './physics.js';
-import { headingTo, sin, cos, length } from './fmath.js';
+import { DT, TICK_RATE } from './constants.js';
+import { headingTo, sin, cos, length, wrapAngle, PI } from './fmath.js';
 import { hasLineOfSight } from './los.js';
-import { damageSoldier } from './soldier/soldier.js';
+import { damageSoldier, EYE_HEIGHT } from './soldier/soldier.js';
 
 export const GRENADE_RANGE = 14;
-export const FUSE = 2.2; // s from throw
-export const BLAST_RADIUS = 6;
-const MAX_DAMAGE = 130;
+export const GRENADE = {
+  frag: { fuse: 2.2, radius: 6, damage: 130 },
+  flash: { fuse: 1.5, radius: 9, blind: 3.2 },
+  smoke: { fuse: 1.2, radius: 3.2, duration: 15 },
+};
+/** Kept for callers that only care about frags. */
+export const BLAST_RADIUS = GRENADE.frag.radius;
 const GRAVITY = 9.81;
 const RELEASE_HEIGHT = 1.7;
 
-export function throwGrenade(world, s, tx, tz) {
-  s.grenades--;
+export function throwGrenade(world, s, tx, tz, kind = 'frag') {
+  s.gear[kind]--;
   let dx = tx - s.x;
   let dz = tz - s.z;
   const dist = length(dx, dz);
@@ -38,20 +42,37 @@ export function throwGrenade(world, s, tx, tz) {
       .setCcdEnabled(true),
   );
   world.physics.createCollider(RAPIER.ColliderDesc.ball(0.06).setRestitution(0.35).setFriction(0.8).setDensity(4), body);
-  const g = { id: world.nextId++, team: s.team, ownerId: s.id, fuse: FUSE, body };
+  const g = { id: world.nextId++, kind, team: s.team, ownerId: s.id, fuse: GRENADE[kind].fuse, body };
   world.grenades.push(g);
-  world.events.push({ type: 'throw', id: s.id, grenadeId: g.id });
+  world.events.push({ type: 'throw', id: s.id, grenadeId: g.id, kind });
 }
 
-function explode(world, g) {
+function detonate(world, g) {
   const p = g.body.translation();
-  world.events.push({ type: 'explosion', grenadeId: g.id, x: p.x, y: p.y, z: p.z, radius: BLAST_RADIUS });
-  for (const s of world.soldiers) {
-    if (!s.alive) continue;
-    const d = length(s.x - p.x, s.z - p.z);
-    if (d > BLAST_RADIUS) continue;
-    if (!hasLineOfSight(world, p.x, p.y + 0.15, p.z, s.x, 0.9, s.z)) continue;
-    damageSoldier(world, s, MAX_DAMAGE * (1 - d / BLAST_RADIUS), g.ownerId);
+  const spec = GRENADE[g.kind];
+  world.events.push({ type: 'explosion', kind: g.kind, grenadeId: g.id, x: p.x, y: p.y, z: p.z, radius: spec.radius });
+
+  if (g.kind === 'smoke') {
+    world.smokes.push({ x: p.x, z: p.z, r: spec.radius, until: world.tick + spec.duration * TICK_RATE });
+  } else {
+    for (const s of world.soldiers) {
+      if (!s.alive) continue;
+      const d = length(s.x - p.x, s.z - p.z);
+      if (d > spec.radius) continue;
+      if (g.kind === 'frag') {
+        if (!hasLineOfSight(world, p.x, p.y + 0.15, p.z, s.x, 0.9, s.z)) continue;
+        damageSoldier(world, s, spec.damage * (1 - d / spec.radius), g.ownerId);
+      } else {
+        // Flashbang: needs line of sight to the eyes; looking at it is much worse.
+        if (!hasLineOfSight(world, p.x, p.y + 0.15, p.z, s.x, EYE_HEIGHT[s.stance], s.z)) continue;
+        const facing = Math.abs(wrapAngle(headingTo(p.x - s.x, p.z - s.z) - s.heading)) < PI / 2;
+        const dur = spec.blind * (facing ? 1 : 0.5) * (1 - (0.6 * d) / spec.radius);
+        s.blind = Math.max(s.blind, dur);
+        s.suppression = 1;
+        s.target = null;
+        world.events.push({ type: 'blinded', id: s.id, duration: dur });
+      }
+    }
   }
   world.physics.removeRigidBody(g.body);
 }
@@ -59,7 +80,8 @@ function explode(world, g) {
 export function updateGrenades(world) {
   for (const g of world.grenades) {
     g.fuse -= DT;
-    if (g.fuse <= 0) explode(world, g);
+    if (g.fuse <= 0) detonate(world, g);
   }
   world.grenades = world.grenades.filter((g) => g.fuse > 0);
+  world.smokes = world.smokes.filter((s) => s.until > world.tick);
 }

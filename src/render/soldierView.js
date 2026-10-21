@@ -83,7 +83,16 @@ export function createSoldierView(scene, labels) {
     hpBar.position.y = 1.8;
     hpBar.renderOrder = 11;
 
-    root.add(figure, ring, cone);
+    // Status ring: white = blinded by a flashbang, orange = suppressed.
+    const status = new THREE.Mesh(
+      new THREE.RingGeometry(0.55, 0.68, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    status.rotation.x = -Math.PI / 2;
+    status.position.y = 0.025;
+    status.visible = false;
+
+    root.add(figure, ring, cone, status);
     const overlay = new THREE.Group(); // not rotated with the soldier
     overlay.add(tag, hpBack, hpBar);
 
@@ -96,7 +105,7 @@ export function createSoldierView(scene, labels) {
     ghost.visible = false;
 
     scene.add(root, overlay, ghost);
-    return { root, figure, bodyMat, ring, cone, overlay, hpBar, ghost, lastSeen: null };
+    return { root, figure, bodyMat, ring, cone, status, overlay, hpBar, ghost, lastSeen: null };
   }
 
   /**
@@ -138,7 +147,10 @@ export function createSoldierView(scene, labels) {
       v.ring.visible = s.alive && s.id === selectedId;
       v.cone.visible = s.alive && (showCones || s.id === selectedId);
 
-      const hp = Math.max(0, s.hp) / MAX_HP;
+      v.status.visible = s.alive && (s.blind || s.suppressed);
+      if (v.status.visible) v.status.material.color.setHex(s.blind ? 0xffffff : 0xffa040);
+
+      const hp = Math.max(0, s.hp) / (s.maxHp ?? MAX_HP);
       v.hpBar.scale.set(0.7 * hp, 0.08, 1);
       v.hpBar.position.x = -0.35 * (1 - hp);
       v.hpBar.material.color.setHex(hp > 0.5 ? 0x5ee07a : hp > 0.25 ? 0xffc14d : 0xff5a4d);

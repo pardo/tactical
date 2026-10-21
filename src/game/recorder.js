@@ -14,12 +14,18 @@ export function snapshot(world) {
       stance: s.stance,
       alive: s.alive,
       hp: s.hp,
+      maxHp: s.maxHp,
+      role: s.role,
       moving: s.moving,
+      blind: s.blind > 0,
+      suppressed: s.suppression > 0.5,
+      reloading: s.reloadTimer > 0,
       visible: s.visible.slice(),
     })),
+    smokes: world.smokes.map((sm) => ({ x: sm.x, z: sm.z, r: sm.r })),
     grenades: world.grenades.map((g) => {
       const p = g.body.translation();
-      return { id: g.id, x: p.x, y: p.y, z: p.z };
+      return { id: g.id, kind: g.kind, x: p.x, y: p.y, z: p.z };
     }),
     events: world.events.slice(),
   };

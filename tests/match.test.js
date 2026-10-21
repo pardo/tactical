@@ -51,4 +51,13 @@ describe('AI vs AI match', () => {
     console.table(results);
     expect(results.filter((r) => r.winner !== 'draw').length).toBeGreaterThanOrEqual(3);
   });
+
+  it('over 20 seeds: few draws and no big side advantage', () => {
+    const tally = { A: 0, B: 0, draw: 0 };
+    for (let seed = 100; seed < 120; seed++) tally[playAiVsAi(seed).m.world.winner]++;
+    console.log('20-seed tally', tally);
+    expect(tally.draw).toBeLessThanOrEqual(4);
+    expect(tally.A).toBeGreaterThanOrEqual(5);
+    expect(tally.B).toBeGreaterThanOrEqual(5);
+  }, 60000);
 });
