@@ -29,7 +29,8 @@ export function createSoldier(world, { team, x, z, heading = 0, role = 'rifleman
     reloadTimer: 0,
     suppression: 0, // 0..1, from incoming fire
     blind: 0, // seconds left blinded by a flashbang
-    alert: null, // { x, z, ttl }: a threat to turn toward (shot from there, or a teammate's callout)
+    alert: null, // { x, z, ttl }: a threat to turn toward (shot from there, a teammate's callout, a noise)
+    hold: null, // heading ordered by Face / Look: kept covered when idle, sounds and callouts don't pull it away
     // Orders: orders[0] is the current waypoint.
     orders: [],
     path: [],

@@ -126,7 +126,8 @@ function runAction(world, s, a, engaged) {
       return s.actionTimer >= ACTION_TIME.stance;
     case 'face':
       if (engaged) return false;
-      return turnToward(s, headingTo(a.x - s.x, a.z - s.z), TURN_RATE.walk) <= FACE_TOLERANCE;
+      s.hold = headingTo(a.x - s.x, a.z - s.z);
+      return turnToward(s, s.hold, TURN_RATE.walk) <= FACE_TOLERANCE;
     case 'wait':
       s.actionTimer += DT;
       return s.actionTimer >= a.t;
@@ -182,7 +183,10 @@ function runAction(world, s, a, engaged) {
 /** Not moving: face an alert, and get low when pinned down. */
 function idleReactions(s, engaged) {
   if (s.suppression > 0.6 && s.stance === 'stand' && !s.orders.length) s.stance = 'crouch';
-  if (!engaged && s.alert) turnToward(s, headingTo(s.alert.x - s.x, s.alert.z - s.z), TURN_RATE.walk);
+  if (engaged) return;
+  // Shot at from somewhere unseen: face it. Otherwise go back to the ordered angle (e.g. after a firefight).
+  if (s.alert) turnToward(s, headingTo(s.alert.x - s.x, s.alert.z - s.z), TURN_RATE.walk);
+  else if (s.hold !== null) turnToward(s, s.hold, TURN_RATE.walk);
 }
 
 /** Follow the waypoint plan for one tick. */
@@ -200,10 +204,15 @@ export function updateOrders(world, s, engaged) {
       s.pathReady = true;
       s.moveMode = wp.move;
       s.fire = wp.fire;
+      s.hold = null; // a new leg: the old angle no longer applies
       if (wp.move === 'run') s.stance = 'stand';
     }
     if (s.path.length) moveAlongPath(world, s, wp, engaged);
-    if (!s.path.length) s.arrived = true;
+    if (!s.path.length) {
+      s.arrived = true;
+      // Watching a point on the way in: keep covering it after arriving.
+      if (wp.look) s.hold = headingTo(wp.look.x - s.x, wp.look.z - s.z);
+    }
     return;
   }
 

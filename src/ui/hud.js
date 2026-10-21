@@ -375,7 +375,7 @@ export const overlays = {
         <li>Noise goes through walls. Enemies hear <b>running</b> (9 m), <b>opening a door</b> (14 m),
           <b>gunfire</b> (24 m) and <b>breaches</b> (30 m). Walking and crouching are silent.</li>
         <li>When your squad hears an enemy you can't see, a see-through <b>sound ghost</b> marked ? appears
-          where the noise came from, with a ripple; it fades over two turns. Idle soldiers turn toward the sound.</li>
+          where the noise came from, with a ripple; it fades over two turns. Idle soldiers turn toward the sound — unless you ordered them to <b>Face</b> or <b>Look</b> somewhere: they keep covering that angle.</li>
         <li>A plain ring marks where an enemy was last <b>seen</b>.</li>
       </ul>
       <h3>Camera</h3>

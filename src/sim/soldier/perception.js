@@ -9,9 +9,13 @@ export const CLOSE_AWARENESS = 2.5;
 /** Teammates within this range hear a callout. */
 export const CALLOUT_RANGE = 12;
 
-/** Idle = not moving and not under an explicit facing order, so free to react to callouts. */
-function canTakeCallout(s) {
-  if (s.moving || s.alert || s.visible.length) return false;
+/**
+ * Idle = not moving and not under an explicit facing order, so free to turn
+ * toward a teammate's callout or a noise. A soldier told to Face / Look keeps
+ * covering that angle (s.hold) even after its orders run out.
+ */
+export function isFreeToTurn(s) {
+  if (s.moving || s.alert || s.visible.length || s.target || s.hold !== null) return false;
   const wp = s.orders[0];
   if (!wp) return true;
   if (!s.arrived || wp.look) return false;
@@ -44,7 +48,7 @@ export function updatePerception(world) {
     const e = world.soldiers.find((o) => o.id === s.visible[0]);
     for (const t of world.soldiers) {
       if (t === s || t.team !== s.team || !t.alive || t.blind > 0) continue;
-      if (length(t.x - s.x, t.z - s.z) > CALLOUT_RANGE || !canTakeCallout(t)) continue;
+      if (length(t.x - s.x, t.z - s.z) > CALLOUT_RANGE || !isFreeToTurn(t)) continue;
       t.alert = { x: e.x, z: e.z, ttl: ALERT_TTL.callout };
     }
   }

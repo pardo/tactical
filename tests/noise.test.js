@@ -112,4 +112,44 @@ describe('noise', () => {
     }
     expect(rec.frames[rec.frames.length - 1].heard.B).toEqual([]);
   });
+
+  it('a soldier ordered to face an angle keeps covering it when it hears a noise', () => {
+    const { w, made } = setup([
+      ['A', 3, 2],
+      ['B', 11, 1],
+    ]);
+    const [a, b] = made;
+    // Blue stands in the next room and is ordered to face away from the door.
+    const here = cellCenter(w.map, 11, 1);
+    const wp = makeWaypoint(here.x, here.z);
+    wp.actions.push({ type: 'face', x: here.x + 3, z: here.z });
+    applyPlans(w, 'B', { [b.id]: [wp] });
+    for (let i = 0; i < 60; i++) step(w);
+    expect(b.orders).toHaveLength(0); // orders done: the soldier is idle but holding the angle
+    const held = b.heading;
+    // Red walks through the door behind Blue's back.
+    applyPlans(w, 'A', { [a.id]: [makeWaypoint(cellCenter(w.map, 7, 2).x, cellCenter(w.map, 7, 2).z)] });
+    let heard = false;
+    for (let i = 0; i < 150 && !a.visible.length && !b.visible.length; i++) {
+      step(w);
+      heard ||= w.events.some((e) => e.type === 'noise' && e.heardBy === 'B');
+    }
+    expect(heard).toBe(true);
+    expect(b.alert).toBeNull();
+    expect(Math.abs(b.heading - held)).toBeLessThan(1e-6);
+  });
+
+  it('without a facing order, an idle soldier turns toward the noise', () => {
+    const { w, made } = setup([
+      ['A', 3, 2],
+      ['B', 11, 1, Math.PI / 2],
+    ]);
+    const [a, b] = made;
+    const held = b.heading;
+    applyPlans(w, 'A', { [a.id]: [makeWaypoint(cellCenter(w.map, 7, 2).x, cellCenter(w.map, 7, 2).z)] });
+    for (let i = 0; i < 120 && !w.doors[0].state.startsWith('open'); i++) step(w);
+    step(w);
+    step(w);
+    expect(Math.abs(b.heading - held)).toBeGreaterThan(0.05);
+  });
 });

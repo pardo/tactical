@@ -14,14 +14,14 @@ export const ACTION_HELP = {
   cover: ['🛡 Take cover', 'On arrival, steps to the nearest low cover (within 2.5 m), crouches behind it and faces the threat (or the way it was facing).'],
   'stance:crouch': ['▼ Crouch', 'Gets low: harder to hit, hidden behind low cover, but moves slowly.'],
   'stance:stand': ['▲ Stand', 'Stands up: sees and shoots over low cover, moves at full speed.'],
-  face: ['➜ Face…', 'Turns toward a point you tap. Then stays still facing it — "holding the angle" gives the fastest reaction (≈0.12 s).'],
+  face: ['➜ Face…', 'Turns toward a point you tap and keeps covering that angle — "holding the angle" gives the fastest reaction (≈0.12 s). Sounds and teammates\' calls won\'t turn it away; after a firefight it turns back.'],
   wait: ['⏱ Wait', 'Stays put for 1 s before the next action or waypoint. Tap again to add another second.'],
   until: ['⏲ Sync', 'Waits until a moment of the 5 s turn (e.g. @2s), so several soldiers can move at once. Tap again for +0.5 s.'],
   breach: ['🧨 Breach…', 'Tap a closed door next to the soldier: blows it open, stunning (and maybe hurting) enemies right behind it. Very loud.'],
   'grenade:frag': ['💣 Frag…', `Tap where to throw (max ${GRENADE_RANGE} m). Explodes after a short fuse: hurts everyone nearby, friends too, and destroys low cover.`],
   'grenade:flash': ['⚡ Flash…', `Tap where to throw (max ${GRENADE_RANGE} m). Blinds anyone within 9 m with a clear view of the bang (worse if they look at it) for up to 3 s — follow up fast.`],
   'grenade:smoke': ['☁ Smoke…', `Tap where to throw (max ${GRENADE_RANGE} m). A cloud nobody can see through for 15 s: cross open ground behind it.`],
-  look: ['👁 Look while moving…', 'Tap a point to keep watching while walking there (strafing, slower). Without it the soldier looks where it walks.'],
+  look: ['👁 Look while moving…', 'Tap a point to keep watching while walking there (strafing, slower), and keep covering it after arriving. Without it the soldier looks where it walks.'],
 };
 
 /** Help for a tapped control, or null if it has none. */
