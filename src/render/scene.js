@@ -1,23 +1,22 @@
 import * as THREE from 'three';
 
 export function createScene(container) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  // Phones report DPR 3+; capping at 2 keeps fill-rate sane with little visible loss.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1a1d21);
 
-  // Mostly-overhead tactical camera.
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
-  camera.position.set(0, 22, 12);
-  camera.lookAt(0, 0, 0);
 
   scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x30302a, 1.2));
   const sun = new THREE.DirectionalLight(0xffffff, 1.5);
   sun.position.set(8, 20, 6);
   sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left = sun.shadow.camera.bottom = -20;
   sun.shadow.camera.right = sun.shadow.camera.top = 20;
   scene.add(sun);
@@ -31,14 +30,28 @@ export function createScene(container) {
   scene.add(ground);
   scene.add(new THREE.GridHelper(40, 40, 0x555555, 0x2a2a2a));
 
+  const resizeHandlers = [];
   function resize() {
     const { clientWidth: w, clientHeight: h } = container;
+    if (!w || !h) return;
     renderer.setSize(w, h);
     camera.aspect = w / h;
+    // Portrait phones: widen the vertical FOV so the map isn't cropped to a sliver.
+    camera.fov = w < h ? 60 : 45;
     camera.updateProjectionMatrix();
+    for (const fn of resizeHandlers) fn(w, h);
   }
-  window.addEventListener('resize', resize);
-  resize();
+  // ResizeObserver also catches orientation changes and mobile URL-bar show/hide.
+  new ResizeObserver(resize).observe(container);
 
-  return { renderer, scene, camera, render: () => renderer.render(scene, camera) };
+  return {
+    renderer,
+    scene,
+    camera,
+    onResize(fn) {
+      resizeHandlers.push(fn);
+      resize();
+    },
+    render: () => renderer.render(scene, camera),
+  };
 }

@@ -16,6 +16,9 @@ orders with a degree of autonomy (fire on sight, hold angle, take cover, throw g
 3. **No `Math.random()`, no `Date.now()`, no iteration over unordered collections in the sim.** Seeded PRNG (mulberry32/xoshiro), sorted entity IDs.
 4. **Data-driven.** Roles, weapons, maps are JSON/JS config, not code branches.
 5. **Offline first.** Hotseat (two players, one screen) works before any networking exists.
+6. **Mobile & touch are first-class.** Every feature must be fully playable on a phone in portrait and landscape
+   using touch only. Mouse/keyboard are extra shortcuts, never the only path. All input goes through
+   `ui/gestures.js` (Pointer Events), touch targets ≥ 44 px, UI respects safe-area insets.
 
 ### Default design decisions (changeable)
 
@@ -28,6 +31,19 @@ orders with a degree of autonomy (fire on sight, hold angle, take cover, throw g
 | Vision | Per-soldier vision cones, team-shared fog of war |
 | Turn timer | Optional planning timer (default 90 s) |
 | Netcode | Lockstep: exchange plans, both peers simulate, compare state hash |
+| Platforms | Desktop + mobile browsers (Chrome Android, Safari iOS) from M1 on; touch-first UI |
+
+### Input scheme
+
+| Action | Touch | Mouse / keyboard |
+|---|---|---|
+| Pan camera | 1-finger drag, or 2-finger drag | Left/middle drag, WASD / arrows |
+| Zoom | Pinch | Wheel, + / − |
+| Rotate | 2-finger twist | Right drag, Q / E |
+| Select soldier / add waypoint | Tap | Click |
+| Context (radial) menu | Long-press (haptic tick) | Long-press or right-click |
+| Move waypoint / draw facing arc | Drag starting on a handle | Same |
+| Confirm turn, undo, soldier switch | Bottom action bar (thumb zone) | Bar + hotkeys (Enter, Ctrl+Z, 1–4) |
 
 ---
 
@@ -92,7 +108,9 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 ### M1 — Sandbox: map, movement, camera
 - [ ] Map format (JSON grid: floor, wall, low cover, high cover, door, window, spawn zones)
 - [ ] Map loader → Rapier static colliders + Three.js meshes (simple boxes)
-- [ ] Camera: pan (WASD/drag), zoom, rotate
+- [x] Camera: pan, zoom-to-point, rotate — touch (drag/pinch/twist) + mouse + keyboard
+- [x] Mobile shell: no browser zoom/scroll, safe areas, DPR cap, orientation-aware FOV, fullscreen button
+- [x] Gesture layer (tap / long-press / pan / pinch / twist), unit tested
 - [ ] Soldier entity (capsule placeholder), grid A* + path smoothing
 - [ ] Click to select, click to move; sim runs in real time for debugging
 
@@ -100,9 +118,11 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 
 ### M2 — Planning UI & turn loop (single player, no enemies)
 - [ ] Turn state machine: `PLANNING → SIMULATING → REVIEW → PLANNING`
-- [ ] Waypoint drawing: click to add, drag to move, right-click to delete, shift for chains
-- [ ] Per-waypoint radial menu: speed, stance, fire mode, facing, wait
-- [ ] Facing tool: drag an arc to "hold this angle"
+- [ ] Waypoint drawing: tap to add, drag handle to move, long-press → delete/insert (desktop: click, right-click)
+- [ ] Bottom action bar: soldier portraits (tap to select), Undo, Clear, Confirm — thumb reachable
+- [ ] Per-waypoint radial menu (long-press, finger-sized slices): speed, stance, fire mode, facing, wait
+- [ ] Facing tool: drag an arc to "hold this angle" (enlarged hit areas on touch)
+- [ ] Waypoints/handles drawn with screen-space size so they stay tappable when zoomed out
 - [ ] Path + timeline preview (ghost soldier, time stamps along the path)
 - [ ] Simulate exactly 300 ticks, then stop mid-path; remaining plan carries over
 - [ ] Undo/redo, clear plan per soldier
@@ -187,7 +207,7 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 - [ ] Optional authoritative server (Node running the same `sim/`) for ranked play with real hidden information
 - [ ] Squad progression / loadout customization / cosmetics
 - [ ] Spectator mode (late-joining peers receive plans only)
-- [ ] Mobile/touch planning UI
+- [ ] Installable PWA (manifest, offline cache, landscape lock option)
 - [ ] Deploy: static hosting (GitHub Pages / Netlify / Cloudflare Pages)
 
 ---
