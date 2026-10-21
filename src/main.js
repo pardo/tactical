@@ -453,7 +453,8 @@ function logFrame(i, frame) {
 }
 
 function visibleLog() {
-  const hideTeam = g.mode === 'vsAI' ? 'B' : null; // don't leak the AI's thoughts in a real match
+  // Don't leak the AI's thoughts while the match is on; once it is over, show everything.
+  const hideTeam = g.mode === 'vsAI' && g.match.phase !== 'over' ? 'B' : null;
   const out = [];
   for (let k = g.log.length - 1; k >= 0 && out.length < LOG_LINES; k--) {
     const e = g.log[k];
@@ -1098,7 +1099,7 @@ function drawPlans() {
     const t = g.recorder.turnAt(g.cursor);
     if (!t) return g.plans.hide();
     const start = frames()[t.frame];
-    const showTeams = g.mode === 'vsAI' ? ['A'] : ['A', 'B'];
+    const showTeams = g.mode === 'vsAI' && g.match.phase !== 'over' ? ['A'] : ['A', 'B'];
     plans = start.soldiers
       .filter((s) => s.alive && showTeams.includes(s.team))
       .map((s) => ({

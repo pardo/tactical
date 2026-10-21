@@ -72,7 +72,8 @@ export function createMatch({ mode, mapDef, mapId = null, seed, squads = {}, loc
 
     /** Which team's fog of war applies; null = see everything. */
     get viewerTeam() {
-      if (mode === 'aiVsAi' || mode === 'replay') return null;
+      // Spectating, replays, and rewatching a finished match: no fog of war.
+      if (mode === 'aiVsAi' || mode === 'replay' || m.phase === 'over') return null;
       if (mode === 'vsAI') return 'A';
       if (mode === 'online') return localTeam;
       return m.phase === 'planning' || m.phase === 'handoff' ? m.planningTeam : null;

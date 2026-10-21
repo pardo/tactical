@@ -69,3 +69,19 @@ describe('AI vs AI match', () => {
     expect(tally.B).toBeGreaterThanOrEqual(14);
   }, 120000);
 });
+
+describe('fog of war', () => {
+  it('a vs-AI match shows only your side until it is over, then everything (for rewatching)', () => {
+    const m = createMatch({ mode: 'vsAI', mapDef: killhouse, seed: 3 });
+    m.beginTurn();
+    expect(m.viewerTeam).toBe('A');
+    // Play on with no orders for Blue: the AI comes and the match ends.
+    for (let turn = 0; turn < MAX_TURNS && m.phase !== 'over'; turn++) {
+      if (m.phase !== 'planning') m.beginTurn();
+      m.confirm();
+      while (m.stepSim());
+    }
+    expect(m.phase).toBe('over');
+    expect(m.viewerTeam).toBeNull();
+  });
+});
