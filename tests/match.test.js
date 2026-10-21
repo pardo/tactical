@@ -52,12 +52,20 @@ describe('AI vs AI match', () => {
     expect(results.filter((r) => r.winner !== 'draw').length).toBeGreaterThanOrEqual(3);
   });
 
-  it('over 20 seeds: few draws and no big side advantage', () => {
+  it('no side advantage: 40 seeds with identical squads split roughly evenly', () => {
     const tally = { A: 0, B: 0, draw: 0 };
-    for (let seed = 100; seed < 120; seed++) tally[playAiVsAi(seed).m.world.winner]++;
-    console.log('20-seed tally', tally);
-    expect(tally.draw).toBeLessThanOrEqual(4);
-    expect(tally.A).toBeGreaterThanOrEqual(5);
-    expect(tally.B).toBeGreaterThanOrEqual(5);
-  }, 60000);
+    const squad = ['breacher', 'rifleman', 'lmg', 'sniper'];
+    for (let seed = 200; seed < 240; seed++) {
+      const m = createMatch({ mode: 'aiVsAi', mapDef: killhouse, seed, squads: { A: squad, B: squad } });
+      while (m.phase !== 'over') {
+        m.beginTurn();
+        while (m.stepSim() && m.phase === 'simulating');
+      }
+      tally[m.world.winner]++;
+    }
+    console.log('mirrored 40-seed tally', tally);
+    expect(tally.draw).toBeLessThanOrEqual(6);
+    expect(tally.A).toBeGreaterThanOrEqual(14);
+    expect(tally.B).toBeGreaterThanOrEqual(14);
+  }, 120000);
 });

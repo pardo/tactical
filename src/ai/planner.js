@@ -97,6 +97,14 @@ function coverAgainst(map, cx, cz, threat) {
 }
 
 /** Best reachable tile within `radius` of `near`, preferring low cover facing the threat. */
+/**
+ * Tie-breaks in team-relative coordinates (team B's world is rotated 180°), so
+ * a symmetric map gives both AIs mirror-image decisions instead of one side
+ * always preferring "west".
+ */
+const side = (s) => (s.team === 'A' ? 1 : -1);
+const tieBreak = (s) => (a, b) => side(s) * (a.x - b.x) || side(s) * (a.z - b.z);
+
 function findSpot(world, s, near, threat, radius, taken) {
   const { map } = world;
   const c = worldToCell(map, near.x, near.z);
@@ -115,7 +123,7 @@ function findSpot(world, s, near, threat, radius, taken) {
       candidates.push({ x: p.x, z: p.z, cover, score });
     }
   }
-  candidates.sort((a, b) => a.score - b.score || a.x - b.x || a.z - b.z);
+  candidates.sort((a, b) => a.score - b.score || tieBreak(s)(a, b));
   return candidates.find((p) => findPath(map, s.x, s.z, p.x, p.z)) ?? null;
 }
 
@@ -135,7 +143,8 @@ function findOverwatch(world, s, threat, radius, taken) {
       if (!hasLineOfSight(world, p.x, EYE_HEIGHT.stand, p.z, threat.x, BODY_HEIGHT.stand, threat.z)) continue;
       const cover = coverAgainst(map, cx, cz, threat);
       const score = dist(p, s) * 0.5 + (cover === 'low' ? 0 : 3) - Math.min(dist(p, threat), 20) * 0.1;
-      if (!best || score < best.score) best = { x: p.x, z: p.z, cover, score };
+      const cand = { x: p.x, z: p.z, cover, score };
+      if (!best || score < best.score || (score === best.score && tieBreak(s)(cand, best) < 0)) best = cand;
     }
   }
   return best && findPath(map, s.x, s.z, best.x, best.z) ? best : null;

@@ -47,7 +47,11 @@ function moveAlongPath(world, s, wp, engaged) {
   }
   let factor = 1;
   if (!engaged) {
-    if (wp.look) {
+    if (s.alert) {
+      // Under fire from somewhere unseen: keep moving but look toward the threat.
+      turnToward(s, headingTo(s.alert.x - s.x, s.alert.z - s.z), TURN_RATE.walk);
+      if (Math.abs(wrapAngle(travel - s.heading)) > PI / 2) factor = 0.6;
+    } else if (wp.look) {
       turnToward(s, headingTo(wp.look.x - s.x, wp.look.z - s.z), TURN_RATE.walk);
       // Strafing or backpedalling is slower than walking forward.
       if (Math.abs(wrapAngle(travel - s.heading)) > PI / 2) factor = 0.6;
@@ -109,11 +113,20 @@ function runAction(world, s, a, engaged) {
   }
 }
 
+/** Not moving: face an alert, and get low when pinned down. */
+function idleReactions(s, engaged) {
+  if (s.suppression > 0.6 && s.stance === 'stand' && !s.orders.length) s.stance = 'crouch';
+  if (!engaged && s.alert) turnToward(s, headingTo(s.alert.x - s.x, s.alert.z - s.z), TURN_RATE.walk);
+}
+
 /** Follow the waypoint plan for one tick. */
 export function updateOrders(world, s, engaged) {
   s.moving = false;
   const wp = s.orders[0];
-  if (!wp) return;
+  if (!wp) {
+    idleReactions(s, engaged);
+    return;
+  }
 
   if (!s.arrived) {
     if (!s.pathReady) {
@@ -133,6 +146,7 @@ export function updateOrders(world, s, engaged) {
     advance(s);
     return;
   }
+  if (a.type === 'wait' || a.type === 'until') idleReactions(s, engaged);
   if (runAction(world, s, a, engaged)) {
     s.actionIdx++;
     s.actionTimer = 0;

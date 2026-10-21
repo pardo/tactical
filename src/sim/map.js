@@ -28,6 +28,9 @@ export function parseMap({ name, rows }) {
       if (ch === 'A' || ch === 'B') spawns[ch].push({ cx, cz });
     }
   });
+  // Team B's spawns are listed in reverse, so on point-symmetric maps the i-th
+  // soldier of each team starts in mirror-image positions.
+  spawns.B.reverse();
   return { name, width, height, tiles, spawns };
 }
 

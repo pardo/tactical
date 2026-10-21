@@ -91,6 +91,10 @@ function updateStatus(world, s) {
   s.shotCooldown = Math.max(0, s.shotCooldown - DT);
   s.suppression = Math.max(0, s.suppression - SUPPRESSION_DECAY * DT);
   s.blind = Math.max(0, s.blind - DT);
+  if (s.alert) {
+    s.alert.ttl -= DT;
+    if (s.alert.ttl <= 0) s.alert = null;
+  }
   if (s.reloadTimer > 0) {
     s.reloadTimer -= DT;
     if (s.reloadTimer <= 0) {
@@ -113,6 +117,7 @@ export function updateCombat(world, s) {
     return false;
   }
 
+  s.alert = null; // we can see someone now; no need to search
   const id = pickTarget(world, s);
   const t = world.soldiers.find((o) => o.id === id);
   const desired = headingTo(t.x - s.x, t.z - s.z);

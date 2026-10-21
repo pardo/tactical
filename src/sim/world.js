@@ -107,7 +107,10 @@ export function step(world) {
   world.events = [];
   if (world.winner) return;
   updatePerception(world);
-  for (const s of world.soldiers) {
+  // Alternate update order every tick so neither team systematically moves first.
+  const n = world.soldiers.length;
+  for (let k = 0; k < n; k++) {
+    const s = world.soldiers[world.tick % 2 ? n - 1 - k : k];
     if (!s.alive) continue;
     const engaged = updateCombat(world, s);
     updateOrders(world, s, engaged);

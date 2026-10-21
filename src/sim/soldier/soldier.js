@@ -29,6 +29,7 @@ export function createSoldier(world, { team, x, z, heading = 0, role = 'rifleman
     reloadTimer: 0,
     suppression: 0, // 0..1, from incoming fire
     blind: 0, // seconds left blinded by a flashbang
+    alert: null, // { x, z, ttl }: a threat to turn toward (shot from there, or a teammate's callout)
     // Orders: orders[0] is the current waypoint.
     orders: [],
     path: [],
@@ -78,7 +79,12 @@ export function damageSoldier(world, s, amount, sourceId) {
   if (!s.alive) return;
   s.hp -= amount;
   world.events.push({ type: 'damage', id: s.id, amount, sourceId });
+  // Shot by someone we can't see: turn toward where it came from.
+  const src = world.soldiers.find((o) => o.id === sourceId);
+  if (src && src.team !== s.team && !s.visible.includes(src.id)) s.alert = { x: src.x, z: src.z, ttl: ALERT_TTL.shot };
 }
+
+export const ALERT_TTL = { shot: 2, callout: 1.5 };
 
 export function resolveDeaths(world) {
   for (const s of world.soldiers) if (s.alive && s.hp <= 0) killSoldier(world, s);
