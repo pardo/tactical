@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 
 export function createScene(container) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance',
+    // ?capture keeps the frame buffer so headless browsers can screenshot the canvas.
+    preserveDrawingBuffer: new URLSearchParams(location.search).has('capture'),
+  });
   // Phones report DPR 3+; capping at 2 keeps fill-rate sane with little visible loss.
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;

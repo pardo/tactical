@@ -1,113 +1,559 @@
+import './style.css';
 import { initPhysics } from './sim/physics.js';
-import { createWorld, spawnSquads, step } from './sim/world.js';
-import { parseMap } from './sim/map.js';
-import { commandMove } from './sim/commands.js';
-import { TICK_RATE } from './sim/constants.js';
+import { TICK_RATE, TURN_TICKS, DT } from './sim/constants.js';
+import { makeWaypoint } from './sim/plan.js';
+import { createMatch, TEAM_NAMES } from './game/match.js';
+import { createRecorder } from './game/recorder.js';
 import killhouse from './maps/killhouse.js';
 import { createScene } from './render/scene.js';
 import { createMapView } from './render/mapView.js';
 import { createSoldierView } from './render/soldierView.js';
+import { createPlanView } from './render/planView.js';
+import { createFxView } from './render/fxView.js';
 import { createCameraRig } from './render/cameraRig.js';
 import { createTapMarker } from './render/marker.js';
 import { attachGestures } from './ui/gestures.js';
 import { createKeyboard } from './ui/keyboard.js';
+import { createHud, overlays, actionLabel } from './ui/hud.js';
+import { createLabels } from './ui/labels.js';
+import { createPlanning } from './ui/planning.js';
 import { startLoop } from './loop.js';
 
 await initPhysics();
 
-const map = parseMap(killhouse);
-const world = createWorld(1234, map);
-spawnSquads(world);
+const SPEEDS = [0.5, 1, 2, 4];
+const PICK_HINTS = {
+  face: 'Tap the map: where to face',
+  look: 'Tap the map: what to watch while moving',
+  grenade: 'Tap the map: grenade target (max 14 m)',
+};
+const LOG_LINES = 10;
 
 const app = document.getElementById('app');
 const view = createScene(app);
-const half = Math.max(map.width, map.height) / 2;
-view.setShadowBounds(half + 2);
-const rig = createCameraRig(view.camera, { bounds: half, distance: map.width * 0.75 });
-let viewW = 1;
-let viewH = 1;
-view.onResize((w, h) => {
-  viewW = w;
-  viewH = h;
-  rig.setViewport(w, h);
-});
-createMapView(view.scene, map);
-const soldiers = createSoldierView(view.scene);
 const marker = createTapMarker(view.scene);
 const keyboard = createKeyboard();
-const hud = document.getElementById('hud');
-soldiers.sync(world);
+const labels = createLabels(document.getElementById('ui'));
+const hud = createHud(document.getElementById('ui'), onAction);
+let viewW = 1;
+let viewH = 1;
+let rig = null;
 
-let selectedId = null;
-let lastAction = '';
+const ui = { paused: false, speed: 1, showCones: false, showPlans: true, logOpen: true, auto: true };
 
-/** Shared by tap (walk) and long-press (run). */
-function orderSelectedTo(x, y, mode) {
+/** Everything belonging to the current match. */
+let g = null;
+
+function startMatch(mode) {
+  endMatch();
+  const seed = (Math.random() * 2 ** 31) >>> 0;
+  const match = createMatch({ mode, mapDef: killhouse, seed });
+  const { map } = match;
+  const half = Math.max(map.width, map.height) / 2;
+  view.setShadowBounds(half + 2);
+  rig = createCameraRig(view.camera, { bounds: half, distance: map.width * 0.8 });
+  rig.setViewport(viewW, viewH);
+
+  g = {
+    mode,
+    seed,
+    match,
+    recorder: createRecorder(match.world),
+    mapView: createMapView(view.scene, map),
+    soldiers: createSoldierView(view.scene, match.labels),
+    plans: createPlanView(view.scene),
+    fx: createFxView(view.scene),
+    planning: createPlanning(map),
+    cursor: 0,
+    budget: 0,
+    turnEndWait: 0,
+    log: [],
+    overShown: false,
+    watchSelected: null,
+  };
+  ui.paused = false;
+  ui.speed = 1;
+  ui.showCones = mode === 'aiVsAi';
+  hud.overlay(null);
+  nextTurn();
+}
+
+function endMatch() {
+  if (!g) return;
+  view.scene.remove(g.mapView);
+  g.soldiers.dispose();
+  g.plans.hide();
+  g.fx.clear();
+  g = null;
+}
+
+const frames = () => g.recorder.frames;
+const atLive = () => g.cursor >= frames().length - 1;
+const editing = () => g && g.match.phase === 'planning' && atLive();
+const soldierOf = (id) => g.match.world.soldiers.find((s) => s.id === id);
+
+function nextTurn() {
+  g.turnEndWait = 0;
+  g.match.beginTurn();
+  onPhase();
+}
+
+function onPhase() {
+  const { match } = g;
+  if (match.phase === 'planning') {
+    g.planning.begin(match.planningTeam, match.drafts[match.planningTeam], () => match.world.soldiers);
+  } else if (match.phase === 'simulating') {
+    const notes = { ...match.aiNotes.A, ...match.aiNotes.B };
+    g.recorder.startTurn(match.turn, match.drafts, notes);
+    const frame = frames().length - 1;
+    for (const [id, note] of Object.entries(notes)) {
+      const s = soldierOf(Number(id));
+      g.log.push({ i: frame, team: s.team, cls: 'note', text: `T${match.turn} ${match.labels[id]}: ${note}` });
+    }
+    ui.paused = false;
+  }
+}
+
+/** Advance playback by one frame, simulating if we are at the live edge. */
+function advance() {
+  if (!atLive()) {
+    g.cursor++;
+    g.fx.play(frames()[g.cursor]);
+    return true;
+  }
+  if (g.match.phase !== 'simulating') return false;
+  g.match.stepSim();
+  g.recorder.record(g.match.world);
+  g.cursor++;
+  const frame = frames()[g.cursor];
+  logFrame(g.cursor, frame);
+  g.fx.play(frame);
+  return true;
+}
+
+function turnTime(i) {
+  const t = g.recorder.turnAt(i);
+  return t ? { turn: t.turn, sec: (i - t.frame) / TICK_RATE } : { turn: 0, sec: 0 };
+}
+
+function logFrame(i, frame) {
+  const L = g.match.labels;
+  const { turn, sec } = turnTime(i);
+  const ts = `T${turn} ${sec.toFixed(1)}s`;
+  const team = (id) => soldierOf(id).team;
+  for (const e of frame.events) {
+    if (e.type === 'engage') {
+      g.log.push({ i, team: team(e.id), cls: team(e.id), text: `${ts} ${L[e.id]} sees ${L[e.targetId]} · react ${e.reaction.toFixed(2)}s (${e.why})` });
+    } else if (e.type === 'damage') {
+      g.log.push({ i, team: team(e.sourceId), cls: team(e.sourceId), text: `${ts} ${L[e.sourceId]} hits ${L[e.id]} −${Math.round(e.amount)}` });
+    } else if (e.type === 'death') {
+      g.log.push({ i, team: null, cls: 'kill', text: `${ts} ☠ ${L[e.id]} down` });
+    } else if (e.type === 'throw') {
+      g.log.push({ i, team: team(e.id), cls: team(e.id), text: `${ts} ${L[e.id]} throws a grenade` });
+    }
+  }
+}
+
+function visibleLog() {
+  const hideTeam = g.mode === 'vsAI' ? 'B' : null; // don't leak the AI's thoughts in a real match
+  const out = [];
+  for (let k = g.log.length - 1; k >= 0 && out.length < LOG_LINES; k--) {
+    const e = g.log[k];
+    if (e.i > g.cursor) continue;
+    if (hideTeam && e.team === hideTeam) continue;
+    out.push(e);
+  }
+  return out.reverse();
+}
+
+function jumpTo(i) {
+  g.cursor = Math.max(0, Math.min(frames().length - 1, i));
+  g.fx.clear();
+}
+
+// ---------------------------------------------------------------- input
+
+function handleTap(x, y, long) {
+  if (!g || !rig) return;
   const p = rig.groundAt(x, y);
-  if (!p || selectedId === null) return;
-  const ok = commandMove(world, selectedId, p.x, p.z, mode);
-  marker.show(p, ok ? (mode === 'run' ? 0xffb347 : 0x5ad1ff) : 0xff4d4d);
-  lastAction = ok ? `#${selectedId} ${mode} → ${p.x.toFixed(1)}, ${p.z.toFixed(1)}` : 'no path';
+  if (!editing()) {
+    const id = g.soldiers.pick(view.camera, x, y, viewW, viewH);
+    g.watchSelected = id === g.watchSelected ? null : id;
+    return;
+  }
+  const P = g.planning;
+  if (P.state.pickMode) {
+    if (p && P.applyPick(p.x, p.z)) marker.show(p, 0xc28bff);
+    return;
+  }
+  if (!long) {
+    const h = g.plans.pickWaypoint(view.camera, x, y, viewW, viewH);
+    if (h) {
+      P.selectWaypoint(h.soldierId, h.index);
+      return;
+    }
+    const own = (id) => soldierOf(id)?.team === P.state.team;
+    const sid = g.soldiers.pick(view.camera, x, y, viewW, viewH, own);
+    if (sid !== null) {
+      if (sid === P.state.selectedId) P.deselectWaypoint();
+      else P.selectSoldier(sid);
+      return;
+    }
+  }
+  if (!p) return;
+  const ok = P.addWaypoint(p.x, p.z, long ? 'run' : null);
+  marker.show(p, ok ? (long ? 0xffb347 : 0x5ad1ff) : 0xff4d4d);
+  if (long) navigator.vibrate?.(15);
 }
 
 attachGestures(app, {
-  onPan: (dx, dy) => rig.pan(dx, dy),
-  onOrbit: (dx, dy) => rig.orbit(dx, dy),
-  onPinch: (scale, cx, cy) => rig.zoom(scale, cx, cy),
-  onTwist: (da) => rig.rotate(da),
-  onWheel: (deltaY, x, y) => rig.zoom(Math.exp(-deltaY * 0.0015), x, y),
-  onTap: ({ x, y }) => {
-    const hit = soldiers.pick(view.camera, x, y, viewW, viewH);
-    if (hit !== null) {
-      selectedId = hit === selectedId ? null : hit;
-      lastAction = selectedId === null ? '' : `selected #${selectedId}`;
-      return;
-    }
-    orderSelectedTo(x, y, 'walk');
+  onPan: (dx, dy) => rig?.pan(dx, dy),
+  onOrbit: (dx, dy) => rig?.orbit(dx, dy),
+  onPinch: (scale, cx, cy) => rig?.zoom(scale, cx, cy),
+  onTwist: (da) => rig?.rotate(da),
+  onWheel: (deltaY, x, y) => rig?.zoom(Math.exp(-deltaY * 0.0015), x, y),
+  onTap: ({ x, y }) => handleTap(x, y, false),
+  onLongPress: ({ x, y }) => handleTap(x, y, true),
+  onDragStart: ({ x, y }) => {
+    if (!editing()) return false;
+    const h = g.plans.pickWaypoint(view.camera, x, y, viewW, viewH);
+    if (!h) return false;
+    g.planning.beginDrag(h.soldierId, h.index);
+    return true;
   },
-  onLongPress: ({ x, y }) => {
-    navigator.vibrate?.(15);
-    orderSelectedTo(x, y, 'run');
+  onDrag: ({ x, y }) => {
+    const p = rig.groundAt(x, y);
+    if (p) g.planning.dragWaypointTo(p.x, p.z);
   },
 });
 
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape') selectedId = null;
-  const n = Number(e.key);
-  if (n >= 1 && n <= 8) selectedId = world.soldiers[n - 1]?.id ?? selectedId;
+  if (!g) return;
+  if (e.code === 'Space') onAction('togglePause');
+  else if (e.code === 'Enter' && editing()) onAction('go');
+  else if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) onAction('undo');
+  else if (e.code === 'Escape') {
+    if (g.planning.state.pickMode) g.planning.cancelPick();
+    else g.planning.deselectWaypoint();
+  } else if (editing() && /^Digit[1-8]$/.test(e.code)) {
+    const own = g.match.world.soldiers.filter((s) => s.team === g.planning.state.team);
+    const s = own[Number(e.code.slice(5)) - 1];
+    if (s) g.planning.selectSoldier(s.id);
+  }
 });
 
-document.getElementById('btn-reset').addEventListener('click', () => rig.reset());
-const fsButton = document.getElementById('btn-fullscreen');
-if (!document.fullscreenEnabled) fsButton.hidden = true; // iPhone Safari: use "Add to Home Screen" instead
-fsButton.addEventListener('click', () => {
-  if (document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
-});
+function onAction(action, arg) {
+  const P = g?.planning;
+  switch (action) {
+    case 'start':
+      return startMatch(arg);
+    case 'menu':
+      endMatch();
+      return hud.overlay(overlays.menu());
+    case 'fullscreen':
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
+      return;
+  }
+  if (!g) return;
+  switch (action) {
+    case 'togglePause':
+      ui.paused = !ui.paused;
+      break;
+    case 'cycleSpeed':
+      ui.speed = SPEEDS[(SPEEDS.indexOf(ui.speed) + 1) % SPEEDS.length];
+      break;
+    case 'toggleCones':
+      ui.showCones = !ui.showCones;
+      break;
+    case 'togglePlans':
+      ui.showPlans = !ui.showPlans;
+      break;
+    case 'toggleLog':
+      ui.logOpen = !ui.logOpen;
+      break;
+    case 'resetCamera':
+      rig.reset();
+      break;
+    case 'toggleAuto':
+      ui.auto = !ui.auto;
+      break;
+    case 'scrub':
+      ui.paused = true;
+      jumpTo(Number(arg));
+      break;
+    case 'prevTurn': {
+      const t = g.recorder.turnAt(g.cursor);
+      const idx = g.recorder.turns.indexOf(t);
+      const target = t && g.cursor - t.frame > TICK_RATE / 2 ? t.frame : (g.recorder.turns[idx - 1]?.frame ?? 0);
+      jumpTo(target);
+      break;
+    }
+    case 'nextTurn': {
+      const next = g.recorder.turns.find((t) => t.frame > g.cursor);
+      jumpTo(next ? next.frame : frames().length - 1);
+      break;
+    }
+    case 'goLive':
+      jumpTo(frames().length - 1);
+      ui.paused = false;
+      break;
+    case 'continue':
+      if (g.match.phase === 'turnEnd' && atLive()) nextTurn();
+      break;
+    case 'acceptHandoff':
+      g.match.acceptHandoff();
+      break;
+    case 'rewatch':
+      g.overShown = true;
+      hud.overlay(null);
+      jumpTo(0);
+      ui.paused = false;
+      break;
+    case 'go':
+      if (!editing()) break;
+      g.match.confirm();
+      onPhase();
+      break;
+    case 'select':
+      P.selectSoldier(Number(arg));
+      break;
+    case 'undo':
+      P.undo();
+      break;
+    case 'move':
+      P.setMove(arg);
+      break;
+    case 'fire':
+      P.setFire(arg);
+      break;
+    case 'addStance':
+      P.addAction({ type: 'stance', stance: arg });
+      break;
+    case 'addWait':
+      P.addAction({ type: 'wait', t: 1 });
+      break;
+    case 'pick':
+      if (P.state.pickMode === arg) P.cancelPick();
+      else P.startPick(arg);
+      break;
+    case 'removeAction':
+      P.removeAction(Number(arg));
+      break;
+    case 'clearLook':
+      P.clearLook();
+      break;
+    case 'deleteWaypoint':
+      P.deleteWaypoint();
+      break;
+    case 'clearPlan':
+      P.clearPlan();
+      break;
+    case 'holdHere': {
+      const s = soldierOf(P.state.selectedId);
+      if (!s) break;
+      P.clearPlan();
+      P.state.drafts[s.id] = [{ ...makeWaypoint(s.x, s.z), actions: [{ type: 'stance', stance: 'crouch' }] }];
+      break;
+    }
+  }
+}
 
-const coarse = matchMedia('(pointer: coarse)').matches;
-document.getElementById('help').textContent = coarse
-  ? 'Tap soldier: select · Tap ground: walk · Hold: run · Drag/pinch/twist: camera'
-  : 'Click soldier / 1–8: select · Click: walk · Hold: run · WASD, wheel, right-drag / QE: camera';
+// ---------------------------------------------------------------- frame
+
+function updateHud() {
+  const { match } = g;
+  const P = g.planning;
+  const live = atLive();
+  const frame = frames()[g.cursor];
+  const { turn, sec } = turnTime(g.cursor);
+  const alive = (t) => frame.soldiers.filter((s) => s.team === t && s.alive).length;
+
+  let status;
+  if (match.phase === 'over' && live) {
+    status = match.world.winner === 'draw' ? 'Draw' : `${TEAM_NAMES[match.world.winner]} wins`;
+  } else if (!live) status = `Replay · turn ${turn} · ${sec.toFixed(1)}s`;
+  else if (match.phase === 'planning') status = `Turn ${match.turn} · ${TEAM_NAMES[match.planningTeam]} planning`;
+  else if (match.phase === 'handoff') status = `Turn ${match.turn} · handoff`;
+  else status = `Turn ${match.turn} · ${(g.match.turnTick / TICK_RATE).toFixed(1)}s / ${(TURN_TICKS / TICK_RATE).toFixed(0)}s`;
+  hud.status(`${status}\nBlue ${alive('A')} · Red ${alive('B')}`);
+  hud.buttons({ ...ui, inMatch: true });
+  hud.log(visibleLog(), ui.logOpen);
+  hud.timeline({
+    visible: frames().length > 1,
+    cursor: g.cursor,
+    max: frames().length - 1,
+    label: `T${turn} ${sec.toFixed(1)}s`,
+    live,
+  });
+
+  if (match.phase === 'handoff') {
+    hud.overlay(overlays.handoff(TEAM_NAMES[match.planningTeam]));
+  } else if (match.phase === 'over' && live && !g.overShown) {
+    hud.overlay(overlays.over(status));
+  } else hud.overlay(null);
+
+  if (editing()) {
+    const team = P.state.team;
+    const own = match.world.soldiers.filter((s) => s.team === team);
+    hud.bar({
+      kind: 'plan',
+      canUndo: P.state.undoStack.length > 0,
+      soldiers: own.map((s) => ({
+        id: s.id,
+        team,
+        num: match.labels[s.id].split(' ')[1],
+        label: match.labels[s.id],
+        hp: Math.max(0, Math.round(s.hp)),
+        alive: s.alive,
+        selected: s.id === P.state.selectedId,
+        wps: P.state.drafts[s.id]?.length ?? 0,
+      })),
+    });
+    const s = soldierOf(P.state.selectedId);
+    const w = P.selectedWaypoint;
+    if (s && w) {
+      const est = g.plans.estimates.get(s.id);
+      const mark = est?.marks[P.state.wpIndex];
+      hud.panel({
+        kind: 'waypoint',
+        label: match.labels[s.id],
+        index: P.state.wpIndex,
+        count: P.state.drafts[s.id].length,
+        eta: mark ? (Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : 'unreachable') : '–',
+        grenades: s.grenades,
+        pickMode: P.state.pickMode,
+        wp: w,
+      });
+    } else if (s) {
+      hud.panel({
+        kind: 'soldier',
+        label: match.labels[s.id],
+        hp: Math.max(0, Math.round(s.hp)),
+        grenades: s.grenades,
+        wps: P.state.drafts[s.id]?.length ?? 0,
+      });
+    } else hud.panel(null);
+
+    const hint = P.state.pickMode
+      ? PICK_HINTS[P.state.pickMode]
+      : s && !(P.state.drafts[s.id]?.length)
+        ? 'Tap the map to add a waypoint · hold for a running one'
+        : '';
+    hud.hint(hint);
+  } else {
+    hud.panel(null);
+    if (g.mode === 'aiVsAi') {
+      hud.bar({ kind: 'spectate', auto: ui.auto, canContinue: match.phase === 'turnEnd' && live });
+    } else hud.bar(null);
+    hud.hint(match.phase === 'planning' && !live ? 'Watching replay · tap LIVE to keep planning' : '');
+  }
+}
+
+function drawPlans() {
+  const { match } = g;
+  const P = g.planning;
+  if (!ui.showPlans && !editing()) return g.plans.hide();
+
+  let plans;
+  let selected = null;
+  if (editing()) {
+    const team = P.state.team;
+    plans = match.world.soldiers
+      .filter((s) => s.team === team && s.alive)
+      .map((s) => ({
+        soldierId: s.id,
+        team,
+        start: { x: s.x, z: s.z, stance: s.stance },
+        waypoints: P.state.drafts[s.id] ?? [],
+        editable: true,
+      }));
+    selected = P.state.selectedId !== null ? { soldierId: P.state.selectedId, index: P.state.wpIndex } : null;
+  } else {
+    const t = g.recorder.turnAt(g.cursor);
+    if (!t) return g.plans.hide();
+    const start = frames()[t.frame];
+    const showTeams = g.mode === 'vsAI' ? ['A'] : ['A', 'B'];
+    plans = start.soldiers
+      .filter((s) => s.alive && showTeams.includes(s.team))
+      .map((s) => ({
+        soldierId: s.id,
+        team: s.team,
+        start: { x: s.x, z: s.z, stance: s.stance },
+        waypoints: t.plans[s.team][s.id] ?? [],
+        editable: false,
+      }));
+  }
+  const estimates = g.plans.setPlans(match.map, plans, selected);
+  g.plans.update(rig.state.distance);
+
+  // ETA labels for the selected soldier while planning.
+  if (!editing() || P.state.selectedId === null) return;
+  const sid = P.state.selectedId;
+  const wps = P.state.drafts[sid] ?? [];
+  const est = estimates.get(sid);
+  wps.forEach((w, i) => {
+    const mark = est?.marks[i];
+    const eta = mark && Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : '✕';
+    const icons = w.actions.map((a) => actionLabel(a).split(' ')[0]).join('');
+    const cls = `${i === P.state.wpIndex ? 'sel' : ''} ${mark && mark.arrive > TURN_TICKS / TICK_RATE ? 'late' : ''}`;
+    labels.add(`${i + 1} · ${eta}${icons ? ` ${icons}` : ''}`, { x: w.x, y: 0.2, z: w.z }, view.camera, viewW, viewH, cls);
+  });
+  if (est?.atTurnEnd) labels.add('5s', { ...est.atTurnEnd, y: 0.2 }, view.camera, viewW, viewH);
+}
+
+view.onResize((w, h) => {
+  viewW = w;
+  viewH = h;
+  rig?.setViewport(w, h);
+});
 
 let lastFrame = performance.now();
 startLoop({
   update() {
-    step(world);
-    soldiers.sync(world);
+    if (!g) return;
+    if (!ui.paused && g.match.phase !== 'handoff') {
+      g.budget += ui.speed;
+      while (g.budget >= 1) {
+        g.budget -= 1;
+        if (!advance()) {
+          g.budget = 0;
+          break;
+        }
+      }
+    }
+    if (g.match.phase === 'turnEnd' && atLive()) {
+      if (g.mode !== 'aiVsAi') nextTurn();
+      else if (ui.auto && !ui.paused && (g.turnEndWait += DT) > 0.8) nextTurn();
+    }
   },
   render(alpha) {
     const now = performance.now();
     const dt = Math.min((now - lastFrame) / 1000, 0.1);
     lastFrame = now;
-    keyboard.update(rig, dt);
     marker.update(dt);
-    soldiers.draw(alpha, selectedId);
+    labels.begin();
+    if (g) {
+      keyboard.update(rig, dt);
+      const f = frames();
+      const curr = f[g.cursor];
+      const prev = f[Math.max(0, g.cursor - 1)];
+      const moving = !ui.paused && g.match.phase === 'simulating' || !atLive();
+      const a = moving && !ui.paused ? alpha : 1;
+      const selectedId = editing() ? g.planning.state.selectedId : g.watchSelected;
+      g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones });
+      g.fx.drawGrenades(prev, curr, a);
+      g.fx.update(dt);
+      drawPlans();
+      updateHud();
+    }
+    labels.end();
     view.render();
-    const sel = world.soldiers.find((s) => s.id === selectedId);
-    hud.textContent =
-      `${map.name} · t ${(world.tick / TICK_RATE).toFixed(1)}s` +
-      (sel ? `\n#${sel.id} team ${sel.team} · ${sel.path.length ? sel.moveMode : 'idle'}` : '\nselect a soldier') +
-      (lastAction ? `\n${lastAction}` : '');
   },
 });
+
+hud.buttons({ inMatch: false });
+hud.overlay(overlays.menu());
+
+// Dev-only handle for headless browser tests.
+if (import.meta.env.DEV) window.__tactical = { view, get game() { return g; }, get rig() { return rig; }, ui };

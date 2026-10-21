@@ -2,13 +2,12 @@ import { TURN_TICKS } from './constants.js';
 import { step } from './world.js';
 
 /**
- * Advance the world by one 5 s turn. Plans are ignored until M2.
- * `onTick` lets the renderer record snapshots for replay.
+ * Advance the world by one 5 s turn (or until someone wins).
+ * `onTick` sees the world after every tick, e.g. to record a replay.
  */
-export function runTurn(world, _plans, onTick) {
-  for (let i = 0; i < TURN_TICKS; i++) {
+export function runTurn(world, onTick) {
+  for (let i = 0; i < TURN_TICKS && !world.winner; i++) {
     step(world);
     onTick?.(world);
   }
-  return { events: [] };
 }

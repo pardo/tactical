@@ -21,6 +21,17 @@ describe('map', () => {
     expect(m.spawns.B).toHaveLength(4);
   });
 
+  it('killhouse is point-symmetric so both teams get the same map', () => {
+    const rows = killhouse.rows;
+    const swap = { A: 'B', B: 'A' };
+    rows.forEach((row, z) =>
+      [...row].forEach((ch, x) => {
+        const mirrored = rows[rows.length - 1 - z][row.length - 1 - x];
+        expect(swap[ch] ?? ch).toBe(mirrored);
+      }),
+    );
+  });
+
   it('rejects ragged rows', () => {
     expect(() => parseMap({ name: 'bad', rows: ['###', '##'] })).toThrow(/cols/);
   });
@@ -62,7 +73,7 @@ describe('nav', () => {
   it('smoothed path stays on walkable ground across the killhouse', () => {
     const m = parseMap(killhouse);
     const a = cellCenter(m, 1, 1);
-    const b = cellCenter(m, 15, 9); // inside the lower room
+    const b = cellCenter(m, 13, 10); // inside the house, south-west wing
     const path = findPath(m, a.x, a.z, b.x, b.z);
     expect(path).not.toBeNull();
     for (const p of path) expect(isWalkableAt(m, p.x, p.z)).toBe(true);

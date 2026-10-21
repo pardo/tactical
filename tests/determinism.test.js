@@ -1,26 +1,30 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initPhysics } from '../src/sim/physics.js';
-import { createWorld, hashWorld, spawnSquads } from '../src/sim/world.js';
+import { createWorld, hashWorld, spawnSquads, applyPlans } from '../src/sim/world.js';
 import { parseMap } from '../src/sim/map.js';
-import { commandMove } from '../src/sim/commands.js';
+import { makeWaypoint } from '../src/sim/plan.js';
 import { runTurn } from '../src/sim/turn.js';
 import { createRng } from '../src/sim/rng.js';
 import killhouse from '../src/maps/killhouse.js';
 
 beforeAll(() => initPhysics());
 
-/** Every turn, each soldier gets a random move order drawn from the world rng. */
+/** Every turn, each soldier gets a random move order drawn from the world rng (and fights on the way). */
 function simulate(seed, turns) {
   const world = createWorld(seed, parseMap(killhouse));
   spawnSquads(world);
   const hashes = [];
   for (let t = 0; t < turns; t++) {
-    for (const s of world.soldiers) {
-      const x = world.rng.range(-15, 15);
-      const z = world.rng.range(-8, 8);
-      commandMove(world, s.id, x, z, world.rng.next() < 0.5 ? 'walk' : 'run');
+    for (const team of ['A', 'B']) {
+      const plans = {};
+      for (const s of world.soldiers.filter((o) => o.team === team)) {
+        const wp = makeWaypoint(world.rng.range(-15, 15), world.rng.range(-8, 8));
+        wp.move = world.rng.next() < 0.5 ? 'walk' : 'run';
+        plans[s.id] = [wp];
+      }
+      applyPlans(world, team, plans);
     }
-    runTurn(world, []);
+    runTurn(world);
     hashes.push(hashWorld(world));
   }
   return hashes;

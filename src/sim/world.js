@@ -2,12 +2,18 @@ import { createRng } from './rng.js';
 import { createHasher } from './hash.js';
 import { createPhysicsWorld, RAPIER } from './physics.js';
 import { Tile, cellCenter } from './map.js';
-import { createSoldier, updateSoldier } from './soldier/soldier.js';
+import { createSoldier, resolveDeaths } from './soldier/soldier.js';
+import { updatePerception } from './soldier/perception.js';
+import { updateCombat } from './soldier/combat.js';
+import { updateOrders } from './soldier/orders.js';
+import { updateGrenades } from './grenades.js';
+import { sanitizeWaypoints } from './plan.js';
 import { PI } from './fmath.js';
 
-// Physical heights, used for line-of-sight later. The renderer draws walls shorter for readability.
+// Physical heights, used for line of sight. The renderer draws walls shorter for readability.
 export const WALL_HEIGHT = 2.4;
 export const LOW_COVER_HEIGHT = 1.0;
+export const TEAMS = ['A', 'B'];
 
 /**
  * Deterministic world state. No Three.js, DOM, or wall-clock time in here.
@@ -17,7 +23,9 @@ export function createWorld(seed, map) {
   const physics = createPhysicsWorld();
   physics.createCollider(RAPIER.ColliderDesc.cuboid(map.width / 2, 0.1, map.height / 2).setTranslation(0, -0.1, 0));
   addMapColliders(physics, map);
-  return { tick: 0, rng: createRng(seed), physics, map, soldiers: [], nextId: 1 };
+  // Build the query structures so line-of-sight works before the first tick.
+  physics.step();
+  return { tick: 0, rng: createRng(seed), physics, map, soldiers: [], grenades: [], events: [], winner: null, nextId: 1 };
 }
 
 /** One cuboid per horizontal run of identical tiles keeps the collider count low. */
@@ -45,26 +53,77 @@ function addMapColliders(physics, map) {
 }
 
 export function spawnSquads(world, perTeam = 4) {
-  for (const team of ['A', 'B']) {
+  for (const team of TEAMS) {
     const cells = world.map.spawns[team];
     for (let i = 0; i < Math.min(perTeam, cells.length); i++) {
       const c = cellCenter(world.map, cells[i].cx, cells[i].cz);
-      createSoldier(world, { team, x: c.x, z: c.z, heading: team === 'A' ? 0 : PI });
+      createSoldier(world, { team, x: c.x, z: c.z, heading: team === 'A' ? PI / 2 : -PI / 2 });
     }
   }
 }
 
+/**
+ * Replace a team's orders. `plans` maps soldierId → waypoints. Soldiers whose plan
+ * is unchanged keep their progress (e.g. half-finished waits).
+ */
+export function applyPlans(world, team, plans) {
+  for (const s of world.soldiers) {
+    if (s.team !== team || !s.alive || !(s.id in plans)) continue;
+    const orders = sanitizeWaypoints(world.map, plans[s.id]);
+    if (JSON.stringify(orders) === JSON.stringify(s.orders)) continue;
+    s.orders = orders;
+    s.path = [];
+    s.pathReady = false;
+    s.arrived = false;
+    s.actionIdx = 0;
+    s.actionTimer = 0;
+  }
+}
+
 export function step(world) {
-  for (const s of world.soldiers) updateSoldier(s);
+  world.events = [];
+  if (world.winner) return;
+  updatePerception(world);
+  for (const s of world.soldiers) {
+    if (!s.alive) continue;
+    const engaged = updateCombat(world, s);
+    updateOrders(world, s, engaged);
+  }
+  updateGrenades(world);
+  resolveDeaths(world);
   world.physics.step();
   world.tick++;
+
+  const alive = (team) => world.soldiers.some((s) => s.team === team && s.alive);
+  const a = alive('A');
+  const b = alive('B');
+  if (!a || !b) world.winner = a ? 'A' : b ? 'B' : 'draw';
+}
+
+function hashValue(h, v) {
+  if (v === null || v === undefined) h.str('~');
+  else if (typeof v === 'number') h.num(v);
+  else if (typeof v === 'string') h.str(v).str('|');
+  else if (typeof v === 'boolean') h.str(v ? 'T' : 'F');
+  else if (Array.isArray(v)) {
+    h.str('[');
+    for (const x of v) hashValue(h, x);
+    h.str(']');
+  } else {
+    for (const k of Object.keys(v).sort()) {
+      h.str(k);
+      hashValue(h, v[k]);
+    }
+  }
 }
 
 export function hashWorld(world) {
-  const h = createHasher().num(world.tick).num(world.rng.state);
-  for (const s of world.soldiers) {
-    h.num(s.id).str(s.team).num(s.x).num(s.z).num(s.heading).str(s.moveMode).num(s.path.length);
-    for (const p of s.path) h.num(p.x).num(p.z);
+  const h = createHasher().num(world.tick).num(world.rng.state).str(world.winner ?? '-');
+  for (const s of world.soldiers) hashValue(h, s);
+  for (const g of world.grenades) {
+    const p = g.body.translation();
+    const v = g.body.linvel();
+    h.num(g.id).num(g.fuse).num(p.x).num(p.y).num(p.z).num(v.x).num(v.y).num(v.z);
   }
   return h.digest();
 }

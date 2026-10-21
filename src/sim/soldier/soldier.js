@@ -1,39 +1,75 @@
 import { DT } from '../constants.js';
-import { headingTo, wrapAngle, length, PI } from '../fmath.js';
+import { wrapAngle } from '../fmath.js';
 
-export const MOVE_SPEED = { walk: 1.6, run: 3.6 }; // m/s
-const TURN_RATE = { walk: 7, run: 5 }; // rad/s
-const SHARP_TURN = PI / 3; // slow down while turning more than this
+export const MAX_HP = 100;
+export const EYE_HEIGHT = { stand: 1.6, crouch: 1.1 };
+/** Point others aim at / need to see. Crouched sits just above low cover (1.0 m). */
+export const BODY_HEIGHT = { stand: 1.3, crouch: 1.05 };
+export const LEGS_HEIGHT = 0.5;
 
-export function createSoldier(world, { team, x, z, heading = 0 }) {
-  const soldier = { id: world.nextId++, kind: 'soldier', team, x, z, heading, path: [], moveMode: 'walk' };
+export function createSoldier(world, { team, x, z, heading = 0, role = 'rifleman' }) {
+  const soldier = {
+    id: world.nextId++,
+    kind: 'soldier',
+    team,
+    role,
+    x,
+    z,
+    heading,
+    stance: 'stand',
+    hp: MAX_HP,
+    alive: true,
+    grenades: 2,
+    // Orders: orders[0] is the current waypoint.
+    orders: [],
+    path: [],
+    pathReady: false,
+    arrived: false,
+    actionIdx: 0,
+    actionTimer: 0,
+    moveMode: 'walk',
+    fire: 'onSight',
+    moving: false,
+    // Perception / combat.
+    visible: [],
+    target: null,
+    reaction: 0,
+    shotCooldown: 0,
+  };
   world.soldiers.push(soldier);
   return soldier;
 }
 
-export function updateSoldier(s) {
-  if (!s.path.length) return;
-  const target = s.path[0];
-  const dx = target.x - s.x;
-  const dz = target.z - s.z;
-  const dist = length(dx, dz);
-  if (dist < 1e-6) {
-    s.path.shift();
-    return;
-  }
+/** Rotate toward `desired` at `rate` rad/s; returns the remaining absolute error. */
+export function turnToward(s, desired, rate) {
+  const diff = wrapAngle(desired - s.heading);
+  const max = rate * DT;
+  s.heading = wrapAngle(s.heading + Math.max(-max, Math.min(max, diff)));
+  return Math.abs(wrapAngle(desired - s.heading));
+}
 
-  const turn = wrapAngle(headingTo(dx, dz) - s.heading);
-  const maxTurn = TURN_RATE[s.moveMode] * DT;
-  s.heading = wrapAngle(s.heading + Math.max(-maxTurn, Math.min(maxTurn, turn)));
+export function killSoldier(world, s) {
+  s.alive = false;
+  s.hp = 0;
+  s.orders = [];
+  s.path = [];
+  s.target = null;
+  s.visible = [];
+  s.moving = false;
+  world.events.push({ type: 'death', id: s.id });
+}
 
-  const factor = Math.abs(turn) > SHARP_TURN ? 0.3 : 1;
-  const stepLen = MOVE_SPEED[s.moveMode] * factor * DT;
-  if (stepLen >= dist) {
-    s.x = target.x;
-    s.z = target.z;
-    s.path.shift();
-  } else {
-    s.x += (dx / dist) * stepLen;
-    s.z += (dz / dist) * stepLen;
-  }
+/**
+ * Damage lands immediately but deaths are resolved at the end of the tick
+ * (resolveDeaths), so soldiers who shoot each other in the same tick both fire
+ * regardless of update order.
+ */
+export function damageSoldier(world, s, amount, sourceId) {
+  if (!s.alive) return;
+  s.hp -= amount;
+  world.events.push({ type: 'damage', id: s.id, amount, sourceId });
+}
+
+export function resolveDeaths(world) {
+  for (const s of world.soldiers) if (s.alive && s.hp <= 0) killSoldier(world, s);
 }

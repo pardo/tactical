@@ -12,6 +12,9 @@
  *   onPinch(scale, cx, cy)            2 fingers, scale > 1 = fingers spreading
  *   onTwist(dAngle)                   2 fingers rotating, radians, clockwise on screen > 0
  *   onWheel(deltaY, x, y)
+ *   onDragStart({x, y}) → boolean   one-pointer drag began at (x, y); return true to claim it
+ *                                   (e.g. it started on a waypoint) instead of panning
+ *   onDrag({x, y}), onDragEnd({x, y})
  */
 export const TAP_SLOP_PX = 10;
 export const LONG_PRESS_MS = 450;
@@ -29,8 +32,15 @@ export class GestureTracker {
     if (this.pointers.size === 1) {
       this.primary = { id, x0: x, y0: y, t0: t, button, pointerType, moved: false, tapEligible: true };
     } else {
-      // A second finger turns this into a pinch/twist; the first finger can no longer tap.
-      if (this.primary) this.primary.tapEligible = false;
+      // A second finger turns this into a pinch/twist; the first finger can no longer tap or drag.
+      if (this.primary) {
+        this.primary.tapEligible = false;
+        if (this.primary.dragging) {
+          this.primary.dragging = false;
+          const p = this.pointers.get(this.primary.id);
+          this.h.onDragEnd?.({ x: p.x, y: p.y });
+        }
+      }
       this.pair = this.#pairState();
     }
   }
@@ -59,9 +69,11 @@ export class GestureTracker {
     if (!pr.moved && Math.hypot(x - pr.x0, y - pr.y0) > TAP_SLOP_PX) {
       pr.moved = true;
       pr.tapEligible = false;
+      if (pr.button !== 2 && !pr.longPressed) pr.dragging = !!this.h.onDragStart?.({ x: pr.x0, y: pr.y0 });
     }
     if (!pr.moved || pr.longPressed) return;
-    if (pr.button === 2) this.h.onOrbit?.(dx, dy);
+    if (pr.dragging) this.h.onDrag?.({ x, y });
+    else if (pr.button === 2) this.h.onOrbit?.(dx, dy);
     else this.h.onPan?.(dx, dy);
   }
 
@@ -71,6 +83,7 @@ export class GestureTracker {
     if (this.pointers.size === 1 && pr?.id === id && pr.tapEligible && !pr.longPressed) {
       this.h.onTap?.({ x, y, pointerType: pr.pointerType });
     }
+    if (pr?.id === id && pr.dragging) this.h.onDragEnd?.({ x, y });
     this.pointers.delete(id);
 
     if (this.pointers.size === 1) {

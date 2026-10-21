@@ -9,6 +9,9 @@ function setup() {
     onOrbit: vi.fn(),
     onPinch: vi.fn(),
     onTwist: vi.fn(),
+    onDragStart: vi.fn(() => false),
+    onDrag: vi.fn(),
+    onDragEnd: vi.fn(),
   };
   return { h, g: new GestureTracker(h) };
 }
@@ -84,5 +87,27 @@ describe('GestureTracker', () => {
     g.up(touch(1, 110, 100));
     expect(h.onPan).toHaveBeenLastCalledWith(10, 0);
     expect(h.onTap).not.toHaveBeenCalled();
+  });
+
+  it('a claimed drag goes to onDrag instead of panning', () => {
+    const { h, g } = setup();
+    h.onDragStart.mockReturnValue(true);
+    g.down(touch(1, 100, 100));
+    g.move(touch(1, 120, 100));
+    g.move(touch(1, 130, 105));
+    g.up(touch(1, 130, 105));
+    expect(h.onDragStart).toHaveBeenCalledWith({ x: 100, y: 100 });
+    expect(h.onDrag).toHaveBeenLastCalledWith({ x: 130, y: 105 });
+    expect(h.onDragEnd).toHaveBeenCalledOnce();
+    expect(h.onPan).not.toHaveBeenCalled();
+  });
+
+  it('an unclaimed drag pans', () => {
+    const { h, g } = setup();
+    g.down(touch(1, 100, 100));
+    g.move(touch(1, 120, 100));
+    expect(h.onDragStart).toHaveBeenCalled();
+    expect(h.onPan).toHaveBeenCalled();
+    expect(h.onDrag).not.toHaveBeenCalled();
   });
 });
