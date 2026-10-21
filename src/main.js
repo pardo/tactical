@@ -26,7 +26,7 @@ import { startLoop } from './loop.js';
 import { createAudio } from './render/audio.js';
 import { exportReplay, validateReplay, fastForward, replayMapDef } from './game/replay.js';
 import { hashWorld } from './sim/world.js';
-import { createSession } from './net/session.js';
+import { createSession, EMOTES } from './net/session.js';
 import { createTrysteroTransport, randomRoomCode } from './net/trystero.js';
 
 await initPhysics();
@@ -200,6 +200,9 @@ function onNetEvent(e) {
     case 'desync':
       g?.log.push({ i: g.cursor, team: null, cls: 'kill', text: `⚠ DESYNC on turn ${e.turn} (${e.local} vs ${e.remote})` });
       if (g) g.netMessage = overlays.message('Desync', `The two games diverged on turn ${e.turn}. Please report this.`);
+      break;
+    case 'emote':
+      if (g) g.toast = { text: `Opponent: ${e.emote}`, until: performance.now() + 2500 };
       break;
     case 'cheat':
       if (g) g.netMessage = overlays.message('Invalid plan', "The opponent's plan did not match what they committed to.");
@@ -753,6 +756,11 @@ function onAction(action, arg) {
     case 'toggleMenu':
       ui.menuOpen = !ui.menuOpen;
       break;
+    case 'emote':
+      net?.session.emote(arg);
+      g.toast = { text: `You: ${arg}`, until: performance.now() + 1500 };
+      ui.menuOpen = false;
+      break;
     case 'resetCamera':
       rig.reset();
       ui.menuOpen = false;
@@ -947,7 +955,7 @@ function updateHud() {
   else status = `Turn ${match.turn} · ${(g.match.turnTick / TICK_RATE).toFixed(1)}s / ${(TURN_TICKS / TICK_RATE).toFixed(0)}s`;
   const zone = frame.objective ? ` · zone ${frame.objective.score.A.toFixed(0)}–${frame.objective.score.B.toFixed(0)}/${match.world.objective.needed}s` : '';
   hud.status(`${status}\nBlue ${alive('A')} · Red ${alive('B')}${zone}`);
-  hud.buttons({ ...ui, muted: audio.muted, inMatch: true });
+  hud.buttons({ ...ui, muted: audio.muted, inMatch: true, emotes: g.mode === 'online' ? EMOTES : null });
   hud.log(visibleLog(), ui.logOpen);
   hud.timeline({
     visible: frames().length > 1,
@@ -1012,8 +1020,11 @@ function updateHud() {
       });
     } else hud.panel(null);
 
+    const toastText = g.toast && performance.now() < g.toast.until ? g.toast.text : '';
     const hint = P.state.pickMode
       ? PICK_HINTS[P.state.pickMode]
+      : toastText
+        ? toastText
       : net?.opponentReady
         ? 'Opponent is ready'
       : s && !(P.state.drafts[s.id]?.length)

@@ -2,6 +2,8 @@ import { sha256 } from './sha256.js';
 import { sanitizeSquad } from '../sim/roles.js';
 
 export const PROTOCOL_VERSION = 1;
+/** Quick emotes: a fixed list, so nothing free-form ever crosses the wire. */
+export const EMOTES = ['👍', '😂', '😮', 'GG', '😡'];
 
 const randomToken = () => Array.from(crypto.getRandomValues(new Uint32Array(4)), (n) => n.toString(36)).join('');
 
@@ -110,6 +112,9 @@ export function createSession({ transport, isHost, onEvent }) {
         ts.remote.plans = plans;
         return onEvent({ type: 'plans', turn: msg.turn, team: remoteTeam, plans });
       }
+      case 'emote':
+        if (EMOTES.includes(msg.e)) onEvent({ type: 'emote', emote: msg.e });
+        return;
       case 'state':
         turnState(msg.turn).remoteState = String(msg.hash);
         return compareState(msg.turn);
@@ -173,6 +178,10 @@ export function createSession({ transport, isHost, onEvent }) {
       turnState(turn).localState = hash;
       transport.send({ t: 'state', turn, hash });
       compareState(turn);
+    },
+
+    emote(e) {
+      if (EMOTES.includes(e)) transport.send({ t: 'emote', e });
     },
 
     leave() {

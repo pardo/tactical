@@ -244,3 +244,5 @@ button.danger { color: #ff7a6b; }
   font: inherit;
   pointer-events: auto;
 }
+#top .buttons .more .emotes { display: flex; gap: 4px; }
+#top .buttons .more .emotes button { min-width: 40px; padding: 0 6px; text-align: center; }

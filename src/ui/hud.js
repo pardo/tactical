@@ -93,15 +93,15 @@ export function createHud(root, onAction) {
      * Top-right: the few controls used constantly, plus a ⋯ menu (text labels,
      * big targets) for the rest so the bar stays one row on a phone.
      */
-    buttons({ paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen }) {
+    buttons({ paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen, emotes = null }) {
       const toggle = (action, label, on) => btn(action, `${on ? '☑' : '☐'} ${label}`, { cls: on ? 'on' : '' });
       set(
         'buttons',
-        JSON.stringify([paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen]),
+        JSON.stringify([paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen, emotes]),
         inMatch
           ? `<div class="row1">${btn('togglePause', paused ? '▶' : '⏸', { title: 'Play / pause' })}${btn('cycleSpeed', `${speed}×`, { title: 'Playback speed' })}${btn('toggleMenu', '⋯', { cls: menuOpen ? 'on' : '', title: 'More' })}${btn('quit', '✕', { title: 'Quit to menu' })}</div>` +
               (menuOpen
-                ? `<div class="more">${toggle('toggleLog', 'Event log', logOpen)}${toggle('toggleCones', 'Vision cones', showCones)}${toggle('togglePlans', 'Show plans', showPlans)}${toggle('toggleMute', 'Sound', !muted)}${btn('resetCamera', '⟲ Reset camera')}${btn('fullscreen', '⤢ Fullscreen')}</div>`
+                ? `<div class="more">${emotes ? `<div class="emotes">${emotes.map((e) => btn('emote', esc(e), { arg: e })).join('')}</div>` : ''}${toggle('toggleLog', 'Event log', logOpen)}${toggle('toggleCones', 'Vision cones', showCones)}${toggle('togglePlans', 'Show plans', showPlans)}${toggle('toggleMute', 'Sound', !muted)}${btn('resetCamera', '⟲ Reset camera')}${btn('fullscreen', '⤢ Fullscreen')}</div>`
                 : '')
           : btn('fullscreen', '⤢', { title: 'Fullscreen' }),
       );
@@ -217,7 +217,7 @@ export function createHud(root, onAction) {
          <div class="row seg">
            ${btn('move', '🚶 Walk', { arg: 'walk', cls: w.move === 'walk' ? 'on' : '' })}${btn('move', '🏃 Run', { arg: 'run', cls: w.move === 'run' ? 'on' : '' })}
            <span class="sep"></span>
-           ${btn('fire', '🎯 Fire at will', { arg: 'onSight', cls: w.fire === 'onSight' ? 'on' : '' })}${btn('fire', '🤫 Hold fire', { arg: 'hold', cls: w.fire === 'hold' ? 'on' : '' })}
+           ${btn('fire', '🎯 Fire at will', { arg: 'onSight', cls: w.fire === 'onSight' ? 'on' : '' })}${btn('fire', '↩ Return fire', { arg: 'return', cls: w.fire === 'return' ? 'on' : '', title: 'Only shoot enemies who are shooting at you' })}${btn('fire', '🤫 Hold fire', { arg: 'hold', cls: w.fire === 'hold' ? 'on' : '' })}
          </div>
          <div class="row">
            ${btn('addCover', '🛡 Take cover', { title: 'Get behind the nearest low cover facing the threat' })}

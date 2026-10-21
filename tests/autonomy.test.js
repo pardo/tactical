@@ -82,3 +82,27 @@ describe('take cover action', () => {
     expect(a.stance).toBe('crouch');
   });
 });
+
+describe('return fire mode', () => {
+  it('ignores an enemy that is not engaging, but answers one that is', async () => {
+    const w = setup();
+    const [a1, a2, b] = w.soldiers;
+    a2.alive = false;
+    a2.hp = 0;
+    a1.fire = 'return';
+    a1.heading = Math.PI / 2; // looking at B
+    b.fire = 'hold';
+    b.heading = Math.PI / 2; // B looks away
+    for (let i = 0; i < 60; i++) step(w);
+    expect(a1.visible).toContain(b.id);
+    expect(w.soldiers[2].hp).toBe(b.maxHp); // never shot
+    b.fire = 'onSight';
+    b.heading = -Math.PI / 2; // B turns and engages A
+    let shotBack = false;
+    for (let i = 0; i < 120 && !shotBack; i++) {
+      step(w);
+      shotBack = w.events.some((e) => e.type === 'shot' && e.from === a1.id);
+    }
+    expect(shotBack).toBe(true);
+  });
+});

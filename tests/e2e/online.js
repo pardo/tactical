@@ -62,6 +62,10 @@ async (page) => {
   const [h3, g3] = [await summary(page), await summary(guest)];
   if (h3.soldiers !== g3.soldiers) fail('worlds diverged after rejoin');
   if (h3.msg || g3.msg) fail('a net error message is showing after rejoin');
+  // Emote from host shows on the guest.
+  await page.getByRole('button', { name: '⋯' }).tap();
+  await page.getByRole('button', { name: '👍' }).tap();
+  await waitFor(guest, () => document.querySelector('#hint')?.textContent.includes('Opponent: 👍'), 'emote on guest', 15000);
   await guest.close();
-  return `ok: room ${code}, identical after turn 1, guest reloaded + rejoined, identical after turn 2 (${await phase(page)})`;
+  return `ok: emote delivered, room ${code}, identical after turn 1, guest reloaded + rejoined, identical after turn 2 (${await phase(page)})`;
 }

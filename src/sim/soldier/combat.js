@@ -64,11 +64,17 @@ function friendlyInTheWay(world, s, t) {
   return false;
 }
 
-function pickTarget(world, s) {
-  if (s.target !== null && s.visible.includes(s.target)) return s.target;
+/** Enemies this soldier may shoot at: everyone seen, or (return fire) only those engaging them. */
+function candidates(world, s) {
+  if (s.fire !== 'return') return s.visible;
+  return s.visible.filter((id) => world.soldiers.find((o) => o.id === id).target === s.id);
+}
+
+function pickTarget(world, s, ids) {
+  if (s.target !== null && ids.includes(s.target)) return s.target;
   let best = null;
   let bestScore = Infinity;
-  for (const id of s.visible) {
+  for (const id of ids) {
     const e = world.soldiers.find((o) => o.id === id);
     const off = Math.abs(wrapAngle(headingTo(e.x - s.x, e.z - s.z) - s.heading));
     // Prefer whoever needs the least turning, then the closest.
@@ -111,14 +117,15 @@ function updateStatus(world, s) {
 export function updateCombat(world, s) {
   updateStatus(world, s);
   const w = WEAPONS[s.weapon];
-  if (s.blind > 0 || s.fire === 'hold' || !s.visible.length) {
+  const ids = s.blind > 0 || s.fire === 'hold' ? [] : candidates(world, s);
+  if (!ids.length) {
     s.target = null;
     if (!s.visible.length && s.reloadTimer === 0 && s.ammo < w.mag * TACTICAL_RELOAD) startReload(world, s);
     return false;
   }
 
   s.alert = null; // we can see someone now; no need to search
-  const id = pickTarget(world, s);
+  const id = pickTarget(world, s, ids);
   const t = world.soldiers.find((o) => o.id === id);
   const desired = headingTo(t.x - s.x, t.z - s.z);
   if (id !== s.target) {

@@ -6,7 +6,7 @@
  *
  *   { x, z,
  *     move: 'walk' | 'run',
- *     fire: 'onSight' | 'hold',
+ *     fire: 'onSight' | 'return' | 'hold',
  *     look: null | { x, z },          // face this point while travelling ("slice the pie")
  *     actions: [ { type: 'stance', stance: 'stand' | 'crouch' }
  *              | { type: 'face', x, z }
@@ -21,7 +21,8 @@ export const MAX_ACTIONS = 6;
 export const MAX_WAIT = 10;
 const TURN_LENGTH = 5;
 export const MOVE_MODES = ['walk', 'run'];
-export const FIRE_MODES = ['onSight', 'hold'];
+/** onSight: shoot anyone seen · return: only shoot enemies who are engaging you · hold: never shoot */
+export const FIRE_MODES = ['onSight', 'return', 'hold'];
 export const STANCES = ['stand', 'crouch'];
 export const GRENADE_KINDS = ['frag', 'flash', 'smoke'];
 
