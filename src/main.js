@@ -733,8 +733,12 @@ function onAction(action, arg) {
     case 'toggleMute':
       audio.toggleMute();
       break;
+    case 'toggleMenu':
+      ui.menuOpen = !ui.menuOpen;
+      break;
     case 'resetCamera':
       rig.reset();
+      ui.menuOpen = false;
       break;
     case 'toggleAuto':
       ui.auto = !ui.auto;

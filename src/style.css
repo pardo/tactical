@@ -12,6 +12,11 @@
   --red: #e2574a;
   --go: #2fbf71;
 }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 html,
 body {
   margin: 0;
@@ -61,7 +66,10 @@ button.danger { color: #ff7a6b; }
   gap: 6px;
 }
 #top .status { padding: 6px 8px; background: var(--bg); border-radius: 10px; white-space: pre; text-shadow: 0 1px 2px #000; }
-#top .buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+#top .buttons { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+#top .buttons .row1 { display: flex; gap: 4px; }
+#top .buttons .more { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+#top .buttons .more button { text-align: left; min-height: 44px; }
 #top .buttons button { padding: 0 8px; }
 
 #hint {
@@ -107,10 +115,10 @@ button.danger { color: #ff7a6b; }
 }
 #bottom .panel:empty, #bottom .bar:empty { display: none; }
 #bottom .panel { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 12px; background: var(--bg); pointer-events: auto; }
-#bottom .row { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; align-items: center; }
+#bottom .row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 #bottom .row.info { color: var(--muted); font-size: 12px; padding: 0 2px; }
 #bottom .row .sep { flex: 0 0 8px; }
-#bottom .row button { flex: 0 0 auto; }
+#bottom .row button { flex: 0 0 auto; min-height: 38px; padding: 0 9px; font-size: 13px; }
 #bottom .row.actions button { min-height: 32px; font-size: 12px; border-style: dashed; }
 
 #bottom .timeline { display: flex; gap: 4px; align-items: center; }
@@ -175,8 +183,11 @@ button.danger { color: #ff7a6b; }
 .label.late { opacity: 0.55; }
 
 @media (max-width: 520px) {
-  #top .buttons button { min-width: 36px; min-height: 36px; padding: 0 6px; }
-  #bottom .row button { padding: 0 9px; }
+  .chip { min-width: 44px; padding: 0 4px; }
+  #bottom .bar .go { min-width: 72px; padding: 0 8px; }
+  #bottom .bar .undo { min-width: 44px; padding: 0 6px; }
+  #top .buttons .row1 button { min-width: 40px; min-height: 40px; padding: 0 6px; }
+  #bottom .row button { padding: 0 7px; font-size: 12.5px; }
 }
 
 .squad { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; border: 1px solid var(--line); }
@@ -208,6 +219,7 @@ button.danger { color: #ff7a6b; }
 .t-A { color: var(--blue); }
 .t-B { color: var(--red); }
 .setting { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.setting button { white-space: normal; min-width: 0; padding: 6px; }
 .setting button:last-child:nth-child(odd) { grid-column: 1 / -1; }
 #top .status.urgent { color: #ff7a6b; }
 .card.howto { text-align: left; }

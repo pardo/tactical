@@ -5,8 +5,19 @@ async (page) => {
   };
   await page.goto('http://localhost:5173/');
   await page.getByRole('button', { name: 'Play vs AI' }).tap();
+  // Layout: nothing wider than the phone screen.
+  const setupFits = await page.evaluate(() => {
+    const r = document.querySelector('#overlay .card').getBoundingClientRect();
+    return r.left >= 0 && r.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth;
+  });
+  if (!setupFits) fail('setup card overflows the screen');
   await page.getByRole('button', { name: 'Deploy ▶' }).tap();
   await page.waitForTimeout(200);
+  const chipsFit = await page.evaluate(() => {
+    const c = document.querySelector('#bottom .chips');
+    return c.scrollWidth <= c.clientWidth && document.querySelector('#bottom .bar .go').getBoundingClientRect().right <= innerWidth;
+  });
+  if (!chipsFit) fail('soldier chips or GO button do not fit');
   const cam = () => page.evaluate(() => ({ ...window.__tactical.rig.state }));
   const c0 = await cam();
   if (!(c0.x < -1)) fail(`camera not framed on Blue's side (x=${c0.x.toFixed(1)})`);
@@ -36,5 +47,5 @@ async (page) => {
   await page.getByRole('button', { name: 'Quit' }).tap();
   await page.waitForTimeout(100);
   if (!(await page.locator('#overlay').innerText()).includes('TACTICAL')) fail('did not return to menu');
-  return 'ok: framing, chip focus, quit confirm, collapsed log';
+  return 'ok: layout fits, framing, chip focus, quit confirm, collapsed log';
 }

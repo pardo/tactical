@@ -89,21 +89,21 @@ export function createHud(root, onAction) {
       if (els.hint.textContent !== text) els.hint.textContent = text;
     },
 
-    buttons({ paused, speed, showCones, showPlans, logOpen, muted, inMatch }) {
+    /**
+     * Top-right: the few controls used constantly, plus a ⋯ menu (text labels,
+     * big targets) for the rest so the bar stays one row on a phone.
+     */
+    buttons({ paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen }) {
+      const toggle = (action, label, on) => btn(action, `${on ? '☑' : '☐'} ${label}`, { cls: on ? 'on' : '' });
       set(
         'buttons',
-        JSON.stringify([paused, speed, showCones, showPlans, logOpen, muted, inMatch]),
+        JSON.stringify([paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen]),
         inMatch
-          ? btn('togglePause', paused ? '▶' : '⏸', { title: 'Play / pause' }) +
-              btn('cycleSpeed', `${speed}×`, { title: 'Playback speed' }) +
-              btn('toggleCones', '👁', { cls: showCones ? 'on' : '', title: 'Vision cones' }) +
-              btn('togglePlans', '⤳', { cls: showPlans ? 'on' : '', title: 'Show plans' }) +
-              btn('toggleLog', '☰', { cls: logOpen ? 'on' : '', title: 'Event log' }) +
-              btn('toggleMute', muted ? '🔇' : '🔊', { title: 'Sound' }) +
-              btn('resetCamera', '⌖', { title: 'Reset camera' }) +
-              btn('fullscreen', '⛶', { title: 'Fullscreen' }) +
-              btn('quit', '✕', { title: 'Quit to menu' })
-          : btn('fullscreen', '⛶', { title: 'Fullscreen' }),
+          ? `<div class="row1">${btn('togglePause', paused ? '▶' : '⏸', { title: 'Play / pause' })}${btn('cycleSpeed', `${speed}×`, { title: 'Playback speed' })}${btn('toggleMenu', '⋯', { cls: menuOpen ? 'on' : '', title: 'More' })}${btn('quit', '✕', { title: 'Quit to menu' })}</div>` +
+              (menuOpen
+                ? `<div class="more">${toggle('toggleLog', 'Event log', logOpen)}${toggle('toggleCones', 'Vision cones', showCones)}${toggle('togglePlans', 'Show plans', showPlans)}${toggle('toggleMute', 'Sound', !muted)}${btn('resetCamera', '⟲ Reset camera')}${btn('fullscreen', '⤢ Fullscreen')}</div>`
+                : '')
+          : btn('fullscreen', '⤢', { title: 'Fullscreen' }),
       );
     },
 
