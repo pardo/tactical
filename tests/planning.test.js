@@ -68,4 +68,29 @@ describe('planning', () => {
     p.undo();
     expect(drafts[1][0]).toMatchObject({ x: c.x, z: c.z });
   });
+
+  it('Face turns a soldier in place without a waypoint, and can re-aim it', () => {
+    const { p, drafts } = setup();
+    expect(p.canFaceHere).toBe(true);
+    p.startPick('faceHere');
+    expect(p.applyPick(a.x + 3, a.z)).toBe(true);
+    expect(drafts[1]).toHaveLength(1);
+    expect(drafts[1][0]).toMatchObject({ x: a.x, z: a.z, actions: [{ type: 'face', x: a.x + 3, z: a.z }] });
+    // Again: replaces the angle instead of stacking waypoints.
+    p.startPick('faceHere');
+    p.applyPick(a.x, a.z + 1);
+    expect(drafts[1]).toHaveLength(1);
+    expect(drafts[1][0].actions).toEqual([{ type: 'face', x: a.x, z: a.z + 1 }]);
+    p.undo();
+    expect(drafts[1][0].actions[0].x).toBe(a.x + 3);
+    // With a real move planned, Face belongs on a waypoint instead.
+    const c = cellCenter(map, 3, 1);
+    p.clearPlan();
+    p.addWaypoint(c.x, c.z);
+    p.deselectWaypoint();
+    expect(p.canFaceHere).toBe(false);
+    p.startPick('faceHere');
+    expect(p.state.pickMode).toBeNull();
+  });
 });
+

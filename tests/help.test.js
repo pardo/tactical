@@ -8,7 +8,7 @@ describe('action help', () => {
       ['move', 'walk'], ['move', 'run'],
       ['fire', 'onSight'], ['fire', 'return'], ['fire', 'hold'],
       ['addCover', ''], ['addStance', 'crouch'], ['addStance', 'stand'], ['addWait', ''], ['addSync', ''],
-      ['pick', 'face'], ['pick', 'look'], ['pick', 'breach'],
+      ['pick', 'face'], ['pick', 'faceHere'], ['pick', 'look'], ['pick', 'breach'],
       ['pick', 'grenade:frag'], ['pick', 'grenade:flash'], ['pick', 'grenade:smoke'],
     ];
     for (const [action, arg] of controls) expect(helpFor(action, arg), `${action}:${arg}`).toMatch(/: \S/);

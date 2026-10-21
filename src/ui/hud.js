@@ -206,7 +206,8 @@ export function createHud(root, onAction) {
           'panel',
           JSON.stringify(model),
           `<div class="row info">${esc(model.label)} · ${esc(model.weapon)} · HP ${model.hp} · ${gearText(model.gear)} · ${model.wps} waypoint${model.wps === 1 ? '' : 's'}</div>
-           <div class="row">${btn('clearPlan', '🗑 Clear plan', { disabled: !model.wps })}${btn('holdHere', '▼ Hold here (crouch)')}</div>`,
+           <div class="row">${btn('clearPlan', '🗑 Clear plan', { disabled: !model.wps })}${btn('holdHere', '▼ Hold here (crouch)')}${!model.canFaceHere ? '' : btn('pick', '➜ Face…', { arg: 'faceHere', cls: model.pickMode === 'faceHere' ? 'on' : '', title: tip('faceHere') })}</div>
+           ${model.explain ? `<div class="row explain">${esc(model.explain)}</div>` : ''}`,
         );
       }
       const w = model.wp;
@@ -353,6 +354,7 @@ export const overlays = {
         <li><b>Tap a soldier</b> (or a chip at the bottom) to select it.</li>
         <li><b>Tap the map</b> to add a waypoint, <b>hold</b> to add a running one.</li>
         <li><b>Tap a waypoint</b> to edit it, <b>drag</b> (or hold, then drag) to move it.</li>
+        <li>To just turn a soldier where it stands, select it and tap <b>➜ Face…</b> (no waypoint needed).</li>
         <li>Labels show when each soldier arrives; the white ring is where they'll be when the 5 s end.</li>
         <li>The panel's 📋 line says in words what the selected waypoint will do. Tap any button and that line explains it.</li>
       </ul>

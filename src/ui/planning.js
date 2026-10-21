@@ -12,6 +12,12 @@ export function createPlanning(map) {
   const wps = (id = st.selectedId) => (st.drafts[id] ??= []);
   const wp = () => (st.selectedId !== null && st.wpIndex !== null ? wps()[st.wpIndex] ?? null : null);
   const soldier = (id) => st.soldiers().find((s) => s.id === id);
+  /** No plan, or only a turn-in-place one: Face can (re)aim the soldier without a new waypoint. */
+  const canFaceHere = (id) => {
+    const list = wps(id);
+    const s = soldier(id);
+    return !!s && (!list.length || (list.length === 1 && list[0].x === s.x && list[0].z === s.z));
+  };
 
   function snapshot() {
     st.undoStack.push(structuredClone(st.drafts));
@@ -37,6 +43,11 @@ export function createPlanning(map) {
       st.wpIndex = null;
       const own = soldiers().filter((s) => s.team === team && s.alive);
       if (!own.some((s) => s.id === st.selectedId)) st.selectedId = own[0]?.id ?? null;
+    },
+
+    /** True if the selected soldier can be turned in place (see startPick('faceHere')). */
+    get canFaceHere() {
+      return st.selectedId !== null && canFaceHere(st.selectedId);
     },
 
     get selectedWaypoint() {
@@ -148,9 +159,12 @@ export function createPlanning(map) {
       st.wpIndex = null;
     },
 
-    /** 'face' | 'look' | 'grenade:<kind>': the next map tap supplies the target point. */
+    /**
+     * 'face' | 'look' | 'grenade:<kind>' | 'breach' (on the selected waypoint), or
+     * 'faceHere' (soldier with no plan: turn in place): the next map tap supplies the point.
+     */
     startPick(mode) {
-      if (wp()) st.pickMode = mode;
+      if (mode === 'faceHere' ? st.selectedId !== null && canFaceHere(st.selectedId) : wp()) st.pickMode = mode;
     },
 
     cancelPick() {
@@ -161,6 +175,15 @@ export function createPlanning(map) {
       const w = wp();
       const mode = st.pickMode;
       st.pickMode = null;
+      if (mode === 'faceHere') {
+        // Turn in place: a waypoint where the soldier stands, whose only order is to face the point.
+        const s = soldier(st.selectedId);
+        if (!s || !canFaceHere(s.id)) return false;
+        snapshot();
+        st.drafts[s.id] = [{ ...makeWaypoint(s.x, s.z), actions: [{ type: 'face', x, z }] }];
+        st.wpIndex = null;
+        return true;
+      }
       if (!w || !mode) return false;
       if (mode === 'look') {
         snapshot();

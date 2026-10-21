@@ -35,6 +35,7 @@ await initPhysics();
 const SPEEDS = [0.5, 1, 2, 4];
 const PICK_HINTS = {
   face: 'Tap the map: where to face',
+  faceHere: 'Tap the map: where to face (turns in place)',
   look: 'Tap the map: what to watch while moving',
   'grenade:frag': 'Tap the map: frag target (max 14 m)',
   'grenade:flash': 'Tap the map: flashbang target (max 14 m)',
@@ -1052,6 +1053,9 @@ function updateHud() {
         hp: Math.max(0, Math.round(s.hp)),
         gear: s.gear,
         wps: P.state.drafts[s.id]?.length ?? 0,
+        pickMode: P.state.pickMode,
+        canFaceHere: P.canFaceHere,
+        explain: g.explain?.at === `${s.id}:null` && performance.now() < g.explain.until ? g.explain.text : null,
       });
     } else hud.panel(null);
 

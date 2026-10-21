@@ -15,6 +15,7 @@ export const ACTION_HELP = {
   'stance:crouch': ['▼ Crouch', 'Gets low: harder to hit, hidden behind low cover, but moves slowly.'],
   'stance:stand': ['▲ Stand', 'Stands up: sees and shoots over low cover, moves at full speed.'],
   face: ['➜ Face…', 'Turns toward a point you tap and keeps covering that angle — "holding the angle" gives the fastest reaction (≈0.12 s). Sounds and teammates\' calls won\'t turn it away; after a firefight it turns back.'],
+  faceHere: ['➜ Face…', 'Turns in place toward a point you tap and holds that angle, no waypoint needed. Sounds and teammates\' calls won\'t turn it away.'],
   wait: ['⏱ Wait', 'Stays put for 1 s before the next action or waypoint. Tap again to add another second.'],
   until: ['⏲ Sync', 'Waits until a moment of the 5 s turn (e.g. @2s), so several soldiers can move at once. Tap again for +0.5 s.'],
   breach: ['🧨 Breach…', 'Tap a closed door next to the soldier: blows it open, stunning (and maybe hurting) enemies right behind it. Very loud.'],

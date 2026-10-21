@@ -27,9 +27,17 @@ async (page) => {
       };
     });
 
-  await page.touchscreen.tap(140, 330);
+  // Turn in place: soldier panel → Face… → tap the map. No waypoint needed.
+  await page.getByRole('button', { name: '➜ Face…' }).tap();
+  await page.touchscreen.tap(200, 200);
   await page.waitForTimeout(100);
   let s = await st();
+  if (s.wps.length !== 1 || s.wps[0].actions[0]?.type !== 'face') fail(`face in place: ${JSON.stringify(s.wps)}`);
+  await page.getByRole('button', { name: '🗑 Clear plan' }).tap();
+
+  await page.touchscreen.tap(140, 330);
+  await page.waitForTimeout(100);
+  s = await st();
   if (s.wps.length !== 1) fail(`expected 1 waypoint after tap, got ${s.wps.length}`);
 
   await page.getByRole('button', { name: '🏃 Run' }).tap();
