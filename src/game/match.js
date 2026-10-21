@@ -51,6 +51,7 @@ export function createMatch({ mode, mapDef, mapId = null, seed, squads = {}, loc
     mode,
     gameMode,
     mapId,
+    mapDef,
     seed,
     squads: finalSquads,
     /** Every turn's plans for both teams, as simulated: enough to replay the match. */

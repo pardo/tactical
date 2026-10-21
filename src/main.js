@@ -5,10 +5,13 @@ import { makeWaypoint } from './sim/plan.js';
 import { createMatch, TEAM_NAMES } from './game/match.js';
 import { ROLES, WEAPONS, DEFAULT_SQUAD, cycleRole } from './sim/roles.js';
 import { createRecorder } from './game/recorder.js';
-import { MAPS, MAP_IDS, DEFAULT_MAP } from './maps/index.js';
+import { MAPS, DEFAULT_MAP, getMapDef, listMapIds, isCustomMap, saveCustomMap } from './maps/index.js';
+import { validateMapDef } from './maps/validate.js';
+import { createEditor, blankRows, SIZES } from './ui/editor.js';
+import { parseMap, worldToCell } from './sim/map.js';
 import { MODES, MODE_IDS } from './sim/objective.js';
 import { createScene } from './render/scene.js';
-import { createMapView } from './render/mapView.js';
+import { createMapView, disposeMapView } from './render/mapView.js';
 import { createSoldierView } from './render/soldierView.js';
 import { createPlanView } from './render/planView.js';
 import { createFxView } from './render/fxView.js';
@@ -21,7 +24,7 @@ import { createLabels } from './ui/labels.js';
 import { createPlanning } from './ui/planning.js';
 import { startLoop } from './loop.js';
 import { createAudio } from './render/audio.js';
-import { exportReplay, validateReplay, fastForward } from './game/replay.js';
+import { exportReplay, validateReplay, fastForward, replayMapDef } from './game/replay.js';
 import { hashWorld } from './sim/world.js';
 import { createSession } from './net/session.js';
 import { createTrysteroTransport, randomRoomCode } from './net/trystero.js';
@@ -75,7 +78,7 @@ const ui = {
 const TIMER_OPTIONS = [0, 45, 90, 120];
 
 const settings = () => ({
-  mapName: MAPS[ui.mapId].name,
+  mapName: `${isCustomMap(ui.mapId) ? '★ ' : ''}${getMapDef(ui.mapId)?.name ?? '?'}`,
   modeName: MODES[ui.gameMode].label,
   modeHelp: MODES[ui.gameMode].help,
   timer: ui.planTimer,
@@ -150,6 +153,7 @@ function onNetEvent(e) {
           mode: g.match.gameMode,
           history: g.match.history,
           turn: g.match.turn,
+          mapDef: isCustomMap(g.match.mapId) ? g.match.mapDef : null,
         });
         g.log.push({ i: g.cursor, team: null, cls: 'note', text: 'Opponent reconnected' });
       }
@@ -169,7 +173,7 @@ function onNetEvent(e) {
         seed: e.seed,
         squads: e.squads,
         localTeam: e.localTeam,
-        mapId: MAPS[e.map] ? e.map : ui.mapId,
+        ...onlineMap(e),
         gameMode: MODES[e.mode] ? e.mode : ui.gameMode,
         history: e.history,
       });
@@ -181,7 +185,7 @@ function onNetEvent(e) {
         seed: e.seed,
         squads: e.squads,
         localTeam: e.localTeam,
-        mapId: MAPS[e.map] ? e.map : ui.mapId,
+        ...onlineMap(e),
         gameMode: MODES[e.mode] ? e.mode : ui.gameMode,
       });
       break;
@@ -203,14 +207,23 @@ function onNetEvent(e) {
   }
 }
 
+/** Map for an online start/resume: a built-in id, or the host's custom map if it validates. */
+function onlineMap(e) {
+  if (MAPS[e.map]) return { mapId: e.map };
+  if (e.mapDef && validateMapDef(e.mapDef).ok) return { mapId: e.map, mapDef: { name: String(e.mapDef.name), rows: e.mapDef.rows } };
+  return { mapId: DEFAULT_MAP };
+}
+
 function startMatch(mode, opts = {}) {
   endMatch();
+  closeEditor();
   const seed = opts.seed ?? (Math.random() * 2 ** 31) >>> 0;
   const squads =
     opts.squads ?? (mode === 'aiVsAi' ? {} : mode === 'vsAI' ? { A: ui.squads.A } : { A: ui.squads.A, B: ui.squads.B });
   const mapId = opts.mapId ?? ui.mapId;
   const gameMode = opts.gameMode ?? ui.gameMode;
-  const match = createMatch({ mode, mapDef: MAPS[mapId], mapId, seed, squads, localTeam: opts.localTeam, gameMode });
+  const mapDef = opts.mapDef ?? getMapDef(mapId) ?? MAPS[DEFAULT_MAP];
+  const match = createMatch({ mode, mapDef, mapId, seed, squads, localTeam: opts.localTeam, gameMode });
   const { map } = match;
   const half = Math.max(map.width, map.height) / 2;
   view.setShadowBounds(half + 2);
@@ -227,6 +240,7 @@ function startMatch(mode, opts = {}) {
     yaw: own === 'B' ? Math.PI : 0,
   });
   rig.setViewport(viewW, viewH);
+  if (!mine.length) rig.fitWidth(map.width); // spectating: whole map in view
 
   g = {
     mode,
@@ -286,32 +300,21 @@ function startMatch(mode, opts = {}) {
 
 function downloadReplay() {
   const data = exportReplay(g.match);
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `tactical-${data.mapId}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-}
-
-function pickReplayFile() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json,application/json';
-  input.onchange = async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    loadReplayText(await file.text());
-  };
-  input.click();
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  downloadJson(data, `tactical-${data.mapId.replace(/[^a-z0-9]+/gi, '-')}-${stamp}.json`);
 }
 
 function loadReplayText(text) {
   try {
     const data = validateReplay(JSON.parse(text));
-    startMatch('replay', { seed: data.seed, squads: data.squads, mapId: data.mapId, gameMode: data.gameMode, replay: data });
+    startMatch('replay', {
+      seed: data.seed,
+      squads: data.squads,
+      mapId: data.mapId,
+      mapDef: replayMapDef(data),
+      gameMode: data.gameMode,
+      replay: data,
+    });
   } catch (err) {
     hud.overlay(overlays.message('Could not load replay', err.message));
   }
@@ -319,7 +322,7 @@ function loadReplayText(text) {
 
 function endMatch() {
   if (!g) return;
-  view.scene.remove(g.mapView);
+  disposeMapView(view.scene, g.mapView);
   g.soldiers.dispose();
   g.plans.hide();
   g.fx.clear();
@@ -435,6 +438,101 @@ function jumpTo(i) {
   g.fx.clear();
 }
 
+// ---------------------------------------------------------------- map editor
+
+/** Editor session: { editor, group, built, map, validation, note }, or null. */
+let ed = null;
+
+function openEditor(def) {
+  endMatch();
+  closeEditor();
+  ed = { editor: createEditor({ name: def.name, rows: def.rows }), group: null, built: -1, size: '', map: null, validation: null, note: '' };
+  hud.overlay(null);
+  buildEditorView();
+}
+
+function closeEditor() {
+  if (!ed) return;
+  if (ed.group) disposeMapView(view.scene, ed.group);
+  ed = null;
+}
+
+/** Rebuild the 3D map after edits (cheap at these sizes); new camera when the size changes. */
+function buildEditorView() {
+  const E = ed.editor;
+  if (ed.built === E.state.version) return;
+  ed.built = E.state.version;
+  if (ed.group) disposeMapView(view.scene, ed.group);
+  const def = E.toDef();
+  ed.map = parseMap(def);
+  ed.group = createMapView(view.scene, ed.map, { type: 'zone', x: 0, z: 0, r: 3 });
+  ed.validation = validateMapDef(def);
+  const size = `${ed.map.width}x${ed.map.height}`;
+  if (ed.size !== size) {
+    ed.size = size;
+    const half = Math.max(ed.map.width, ed.map.height) / 2;
+    view.setShadowBounds(half + 2);
+    rig = createCameraRig(view.camera, { bounds: half, distance: ed.map.width * 0.8 });
+    rig.setViewport(viewW, viewH);
+    rig.fitWidth(ed.map.width);
+  }
+}
+
+function editorPaintAt(x, y) {
+  const p = rig.groundAt(x, y);
+  if (!p) return;
+  const { cx, cz } = worldToCell(ed.map, p.x, p.z);
+  if (ed.editor.paint(cx, cz)) ed.note = '';
+}
+
+function updateEditorHud() {
+  const E = ed.editor;
+  const v = ed.validation;
+  hud.status(`Map editor · ${E.width}×${E.height}`);
+  hud.buttons({ inMatch: false });
+  hud.log([], false);
+  hud.timeline({ visible: false });
+  hud.hint(ed.note);
+  hud.overlay(null);
+  hud.bar({ kind: 'editor', tool: E.state.tool, canUndo: E.state.undoStack.length > 0 });
+  hud.panel({ kind: 'editor', name: E.state.name, ok: v.ok, errors: v.errors, warnings: v.warnings });
+}
+
+function downloadJson(data, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+function pickJsonFile(onText) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (file) onText(await file.text());
+  };
+  input.click();
+}
+
+function importMapText(text) {
+  try {
+    const def = JSON.parse(text);
+    const v = validateMapDef(def);
+    // Playability problems can be fixed in the editor; malformed files can't.
+    if (v.errors.some((e) => /rows|unknown tile|size/.test(e))) throw new Error(v.errors[0]);
+    ed.editor.reset(def.rows);
+    ed.editor.state.name = String(def.name ?? 'Imported map').slice(0, 24);
+    ed.note = 'Map imported';
+  } catch (err) {
+    ed.note = `Import failed: ${err.message}`;
+  }
+}
+
 // ---------------------------------------------------------------- input
 
 function handleTap(x, y, long) {
@@ -476,8 +574,20 @@ attachGestures(app, {
   onPinch: (scale, cx, cy) => rig?.zoom(scale, cx, cy),
   onTwist: (da) => rig?.rotate(da),
   onWheel: (deltaY, x, y) => rig?.zoom(Math.exp(-deltaY * 0.0015), x, y),
-  onTap: ({ x, y }) => handleTap(x, y, false),
+  onTap: ({ x, y }) => {
+    if (ed) {
+      ed.editor.beginStroke();
+      return editorPaintAt(x, y);
+    }
+    handleTap(x, y, false);
+  },
   onLongPress: ({ x, y }) => {
+    // Editor: press-and-hold starts a paint stroke, same as dragging straight away.
+    if (ed) {
+      ed.editor.beginStroke();
+      editorPaintAt(x, y);
+      return 'drag';
+    }
     // Holding a waypoint picks it up (then drag it); holding open ground adds a running waypoint.
     if (editing()) {
       const h = g.plans.pickWaypoint(view.camera, x, y, viewW, viewH);
@@ -490,6 +600,12 @@ attachGestures(app, {
     handleTap(x, y, true);
   },
   onDragStart: ({ x, y }) => {
+    // Editor: one finger paints (two fingers still pan/zoom/rotate).
+    if (ed) {
+      ed.editor.beginStroke();
+      editorPaintAt(x, y);
+      return true;
+    }
     if (!editing()) return false;
     const h = g.plans.pickWaypoint(view.camera, x, y, viewW, viewH);
     if (!h) return false;
@@ -497,6 +613,7 @@ attachGestures(app, {
     return true;
   },
   onDrag: ({ x, y }) => {
+    if (ed) return editorPaintAt(x, y);
     const p = rig.groundAt(x, y);
     if (p) g.planning.dragWaypointTo(p.x, p.z);
   },
@@ -524,7 +641,7 @@ function onAction(action, arg) {
       ui.pendingMode = arg;
       return hud.overlay(squadOverlay(arg));
     case 'cycleMap':
-      ui.mapId = cycle(MAP_IDS, ui.mapId);
+      ui.mapId = cycle(listMapIds(), ui.mapId);
       return hud.overlay(net ? lobbyOverlay() : squadOverlay(ui.pendingMode));
     case 'cycleMode':
       ui.gameMode = cycle(MODE_IDS, ui.gameMode);
@@ -560,8 +677,12 @@ function onAction(action, arg) {
       return hud.overlay(overlays.online());
     case 'howTo':
       return hud.overlay(overlays.howTo());
+    case 'editor': {
+      const def = getMapDef(ui.mapId) ?? MAPS[DEFAULT_MAP];
+      return openEditor({ name: isCustomMap(ui.mapId) ? def.name : `${def.name} copy`, rows: def.rows });
+    }
     case 'loadReplay':
-      return pickReplayFile();
+      return pickJsonFile(loadReplayText);
     case 'onlineCreate':
       return enterRoom(randomRoomCode(), true);
     case 'onlineJoin': {
@@ -578,7 +699,12 @@ function onAction(action, arg) {
     case 'onlineReady':
       if (!net) return;
       net.ready = true;
-      net.session.ready(ui.squads[net.isHost ? 'A' : 'B'], { map: ui.mapId, mode: ui.gameMode, timer: ui.planTimer });
+      net.session.ready(ui.squads[net.isHost ? 'A' : 'B'], {
+        map: ui.mapId,
+        mode: ui.gameMode,
+        timer: ui.planTimer,
+        mapDef: isCustomMap(ui.mapId) ? getMapDef(ui.mapId) : undefined,
+      });
       if (!g) hud.overlay(lobbyOverlay());
       return;
     case 'fullscreen':
@@ -586,6 +712,7 @@ function onAction(action, arg) {
       else document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
       return;
   }
+  if (ed) return onEditorAction(action, arg);
   if (!g) return;
   switch (action) {
     case 'togglePause':
@@ -710,6 +837,66 @@ function onAction(action, arg) {
       P.state.drafts[s.id] = [{ ...makeWaypoint(s.x, s.z), actions: [{ type: 'stance', stance: 'crouch' }] }];
       break;
     }
+  }
+}
+
+function onEditorAction(action, arg) {
+  const E = ed.editor;
+  const def = () => E.toDef();
+  switch (action) {
+    case 'tool':
+      E.state.tool = arg;
+      break;
+    case 'editorUndo':
+      E.undo();
+      break;
+    case 'editorName':
+      E.state.name = String(arg).slice(0, 24);
+      break;
+    case 'editorSize': {
+      const i = SIZES.findIndex(([w, h]) => w === E.width && h === E.height);
+      const [w, h] = SIZES[(i + 1) % SIZES.length];
+      E.reset(blankRows(w, h));
+      ed.note = `New blank ${w}×${h} map`;
+      break;
+    }
+    case 'editorSave':
+    case 'editorTest': {
+      if (!ed.validation.ok) {
+        ed.note = 'Fix the problems listed first';
+        break;
+      }
+      const id = saveCustomMap(def());
+      if (!id) {
+        ed.note = 'Could not save (storage unavailable)';
+        break;
+      }
+      ui.mapId = id;
+      if (action === 'editorSave') {
+        ed.note = `Saved "${def().name}"`;
+        break;
+      }
+      closeEditor();
+      ui.pendingMode = 'vsAI';
+      hud.overlay(squadOverlay('vsAI'));
+      break;
+    }
+    case 'editorExport':
+      downloadJson(def(), `tactical-map-${def().name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.json`);
+      break;
+    case 'editorImport':
+      pickJsonFile(importMapText);
+      break;
+    case 'editorExit':
+      closeEditor();
+      hud.panel(null);
+      hud.bar(null);
+      hud.hint('');
+      hud.status('');
+      hud.overlay(overlays.menu());
+      break;
+    case 'fullscreen':
+      break;
   }
 }
 
@@ -917,7 +1104,11 @@ startLoop({
     lastFrame = now;
     marker.update(dt);
     labels.begin();
-    if (g) {
+    if (ed) {
+      buildEditorView();
+      keyboard.update(rig, dt);
+      updateEditorHud();
+    } else if (g) {
       keyboard.update(rig, dt);
       const f = frames();
       const curr = f[g.cursor];
@@ -951,5 +1142,19 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 // Dev-only handle for headless browser tests.
 if (import.meta.env.DEV) {
-  window.__tactical = { view, ui, loadReplayText, get game() { return g; }, get rig() { return rig; } };
+  window.__tactical = {
+    view,
+    ui,
+    loadReplayText,
+    importMapText: (t) => ed && importMapText(t),
+    get game() {
+      return g;
+    },
+    get rig() {
+      return rig;
+    },
+    get editor() {
+      return ed;
+    },
+  };
 }

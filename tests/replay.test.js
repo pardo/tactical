@@ -4,6 +4,7 @@ import { hashWorld } from '../src/sim/world.js';
 import { createMatch } from '../src/game/match.js';
 import { exportReplay, loadReplay, validateReplay } from '../src/game/replay.js';
 import { MAPS } from '../src/maps/index.js';
+import { blankRows } from '../src/ui/editor.js';
 
 beforeAll(() => initPhysics());
 
@@ -42,6 +43,19 @@ describe('replays', () => {
     const { m } = playAi(5, 'warehouse', 'zone');
     const r = loadReplay(JSON.parse(JSON.stringify(exportReplay(m))));
     expect(r.world.objective.score).toEqual(m.world.objective.score);
+  });
+
+  it('custom maps are embedded in the file and replay without the map installed', () => {
+    const def = { name: 'Garage', rows: blankRows(24, 14) };
+    const m = createMatch({ mode: 'aiVsAi', mapDef: def, mapId: 'custom:Garage', seed: 9 });
+    while (m.phase !== 'over') {
+      m.beginTurn();
+      while (m.stepSim() && m.phase === 'simulating');
+    }
+    const file = JSON.parse(JSON.stringify(exportReplay(m)));
+    expect(file.mapDef.rows).toEqual(def.rows);
+    const r = loadReplay(file);
+    expect(hashWorld(r.world)).toBe(hashWorld(m.world));
   });
 
   it('rejects bad files', () => {

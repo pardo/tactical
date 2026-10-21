@@ -1,9 +1,12 @@
+import { TOOLS } from './editor.js';
+
 /**
  * DOM overlay. Buttons carry data-action / data-arg; clicks are delegated to
  * onAction(action, arg). Each section only re-renders when its content key changes.
  */
 const ICON = { stance: { crouch: '▼ Crouch', stand: '▲ Stand' }, face: '➜ Face', wait: '⏱ Wait' };
 export const GRENADE_ICON = { frag: '💣', flash: '⚡', smoke: '☁' };
+
 const GRENADE_NAME = { frag: 'Frag', flash: 'Flash', smoke: 'Smoke' };
 
 function esc(s) {
@@ -110,7 +113,10 @@ export function createHud(root, onAction) {
 
     timeline({ visible, cursor, max, label, live }) {
       els.timeline.hidden = !visible;
-      if (!visible) return;
+      if (!visible) {
+        keys.timeline = null;
+        return;
+      }
       const key = `${max}|${live}`;
       if (keys.timeline !== key) {
         keys.timeline = key;
@@ -138,6 +144,14 @@ export function createHud(root, onAction) {
             btn('continue', 'Next turn ▶', { cls: 'go', disabled: !model.canContinue }),
         );
       }
+      if (model.kind === 'editor') {
+        return set(
+          'bar',
+          JSON.stringify(model),
+          `<div class="chips">${TOOLS.map((t) => btn('tool', t.label, { arg: t.id, cls: `tool ${model.tool === t.id ? 'sel' : ''}` })).join('')}</div>` +
+            btn('editorUndo', '↶', { cls: 'undo', title: 'Undo', disabled: !model.canUndo }),
+        );
+      }
       if (model.kind === 'continue') {
         return set('bar', JSON.stringify(model), btn('continue', 'Plan next turn ▶', { cls: 'go' }));
       }
@@ -163,6 +177,26 @@ export function createHud(root, onAction) {
     /** Contextual panel: selected waypoint editor or soldier summary. */
     panel(model) {
       if (!model) return set('panel', 'none', '');
+      if (model.kind === 'editor') {
+        // The name is left out of the key so typing doesn't rebuild (and blur) the input.
+        const key = JSON.stringify({ ...model, name: null });
+        if (keys.panel === key) return;
+        keys.panel = key;
+        const issues = model.ok
+          ? `<div class="row info ok">✓ Playable${model.warnings.length ? ` · ⚠ ${esc(model.warnings[0])}` : ''}</div>`
+          : model.errors.map((e) => `<div class="row info err">✗ ${esc(e)}</div>`).join('');
+        els.panel.innerHTML = `${issues}
+          <div class="row"><input class="map-name" data-action="editorName" maxlength="24" value="${esc(model.name)}" aria-label="Map name" /></div>
+          <div class="row">
+            ${btn('editorTest', '▶ Test vs AI', { cls: 'go', disabled: !model.ok })}
+            ${btn('editorSave', '💾 Save', { disabled: !model.ok })}
+            ${btn('editorExport', '⬇ Export')}
+            ${btn('editorImport', '📂 Import')}
+            ${btn('editorSize', '🆕 New size')}
+            ${btn('editorExit', '✕ Exit')}
+          </div>`;
+        return;
+      }
       if (model.kind === 'soldier') {
         return set(
           'panel',
@@ -235,6 +269,7 @@ export const overlays = {
       ${btn('start', '👥 Hotseat (2 players, 1 device)', { arg: 'hotseat' })}
       ${btn('onlineMenu', '🌐 Online (2 players)')}
       ${btn('loadReplay', '📂 Load replay')}
+      ${btn('editor', '🛠 Map editor')}
       ${btn('howTo', '❓ How to play')}
       <p class="small">Tap a soldier, tap the map to add waypoints, hold to add a running one.
       Tap a waypoint to edit it, drag it to move it. Pinch / twist / drag to move the camera.</p>

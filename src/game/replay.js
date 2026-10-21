@@ -1,5 +1,6 @@
 import { createMatch } from './match.js';
-import { MAPS } from '../maps/index.js';
+import { MAPS, isCustomMap } from '../maps/index.js';
+import { validateMapDef } from '../maps/validate.js';
 import { MODES } from '../sim/objective.js';
 
 /**
@@ -16,13 +17,20 @@ export function exportReplay(match) {
     gameMode: match.gameMode,
     squads: match.squads,
     turns: match.history,
+    // Custom maps are embedded so the file plays anywhere.
+    ...(isCustomMap(match.mapId) ? { mapDef: { name: match.mapDef.name, rows: match.mapDef.rows } } : {}),
   };
+}
+
+/** The map a replay plays on: built-in by id, or the embedded custom map. */
+export function replayMapDef(data) {
+  return MAPS[data.mapId] ?? data.mapDef;
 }
 
 export function validateReplay(data) {
   if (!data || typeof data !== 'object') throw new Error('not a replay file');
   if (data.v !== REPLAY_VERSION) throw new Error(`replay version ${data.v} is not supported`);
-  if (!MAPS[data.mapId]) throw new Error(`unknown map "${data.mapId}"`);
+  if (!MAPS[data.mapId] && !validateMapDef(data.mapDef).ok) throw new Error(`unknown map "${data.mapId}"`);
   if (!MODES[data.gameMode]) throw new Error(`unknown mode "${data.gameMode}"`);
   if (!Number.isInteger(data.seed) || !Array.isArray(data.turns)) throw new Error('malformed replay');
   return data;
@@ -50,7 +58,7 @@ export function loadReplay(data, hooks) {
   validateReplay(data);
   const match = createMatch({
     mode: 'replay',
-    mapDef: MAPS[data.mapId],
+    mapDef: replayMapDef(data),
     mapId: data.mapId,
     seed: data.seed,
     squads: data.squads,

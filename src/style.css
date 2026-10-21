@@ -215,3 +215,18 @@ button.danger { color: #ff7a6b; }
 .card.howto h3 { margin: 6px 0 0; font-size: 15px; }
 .card.howto ul { margin: 0; padding-left: 18px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .card.howto b { color: var(--fg); }
+#bottom .bar .tool { min-height: 52px; padding: 0 10px; }
+#bottom .bar .tool.sel { background: #3b3410; border-color: var(--accent); color: var(--accent); }
+#bottom .row.info.ok { color: #5ee07a; }
+#bottom .row.info.err { color: #ff7a6b; }
+.map-name {
+  flex: 1;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0f1216;
+  color: var(--fg);
+  font: inherit;
+  pointer-events: auto;
+}

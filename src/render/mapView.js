@@ -124,3 +124,12 @@ export function createMapView(scene, map, objective = null) {
   };
   return group;
 }
+
+/** Remove a map view and free its GPU resources. */
+export function disposeMapView(scene, group) {
+  scene.remove(group);
+  group.traverse((o) => {
+    o.geometry?.dispose();
+    if (o.material) for (const m of [].concat(o.material)) m.dispose();
+  });
+}

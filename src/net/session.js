@@ -9,7 +9,7 @@ const randomToken = () => Array.from(crypto.getRandomValues(new Uint32Array(4)),
  * Two-player online session over any transport, lockstep style: only plans
  * travel, and both peers run the deterministic sim.
  *
- *   lobby:  both send `ready {squad}` → host sends `start {seed, squads, map, mode}`
+ *   lobby:  both send `ready {squad}` → host sends `start {seed, squads, map, mode, timer, mapDef?}`
  *   turn:   each sends `commit {turn, hash}` on GO; once a peer has both
  *           commits it sends `reveal {turn, payload, salt}`. Committing a hash
  *           first means nobody can read the other plan and then change theirs.
@@ -87,6 +87,7 @@ export function createSession({ transport, isHost, onEvent }) {
           map: String(msg.map ?? ''),
           mode: String(msg.mode ?? ''),
           timer: Math.max(0, Math.min(600, Number(msg.timer) || 0)),
+          mapDef: msg.mapDef ?? null, // custom maps travel with the start message; validated by the caller
           localTeam,
         });
       case 'commit': {
@@ -122,6 +123,7 @@ export function createSession({ transport, isHost, onEvent }) {
           map: String(msg.map ?? ''),
           mode: String(msg.mode ?? ''),
           history: Array.isArray(msg.history) ? msg.history : [],
+          mapDef: msg.mapDef ?? null,
           localTeam,
         });
     }
@@ -137,7 +139,7 @@ export function createSession({ transport, isHost, onEvent }) {
     /** @param opts host only: { map, mode, timer } sent to the guest with `start` */
     ready(squad, opts = {}) {
       localSquad = sanitizeSquad(squad);
-      options = { map: opts.map, mode: opts.mode, timer: opts.timer };
+      options = { map: opts.map, mode: opts.mode, timer: opts.timer, mapDef: opts.mapDef };
       if (peer) transport.send({ t: 'ready', v: PROTOCOL_VERSION, squad: localSquad });
       maybeStart();
     },
@@ -157,8 +159,8 @@ export function createSession({ transport, isHost, onEvent }) {
     },
 
     /** Host: bring a reconnected guest up to date (see `rejoin` above). */
-    resume({ seed, squads, map, mode, history, turn }) {
-      transport.send({ t: 'resume', seed, squads, map, mode, history });
+    resume({ seed, squads, map, mode, history, turn, mapDef = null }) {
+      transport.send({ t: 'resume', seed, squads, map, mode, history, mapDef });
       // Forget the old guest's commit for the current turn and re-announce ours.
       const ts = turns.get(turn);
       if (!ts) return;

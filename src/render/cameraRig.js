@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const MIN_DIST = 6;
-const MAX_DIST = 60;
+const MAX_DIST = 90;
 const MIN_PITCH = THREE.MathUtils.degToRad(35);
 const MAX_PITCH = THREE.MathUtils.degToRad(85);
 
@@ -82,6 +82,15 @@ export function createCameraRig(camera, { bounds = 20, distance = 26, focus = { 
     apply();
   }
 
+  /** Zoom so a map `width` metres wide fits across the screen (portrait phones need this). */
+  function fitWidth(width) {
+    const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
+    const hHalf = Math.atan(Math.tan(vHalf) * (viewW / viewH));
+    s.distance = (width / 2 + 1) / Math.tan(hHalf);
+    home.distance = s.distance;
+    apply();
+  }
+
   /** Centre the view on a ground point, keeping zoom and rotation. */
   function focusOn(x, z) {
     s.x = x;
@@ -95,5 +104,5 @@ export function createCameraRig(camera, { bounds = 20, distance = 26, focus = { 
   }
 
   apply();
-  return { state: s, pan, zoom, rotate, orbit, groundAt, setViewport, reset, apply, focusOn };
+  return { state: s, pan, zoom, rotate, orbit, groundAt, setViewport, reset, apply, focusOn, fitWidth };
 }
