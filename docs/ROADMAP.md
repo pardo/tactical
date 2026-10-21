@@ -1,5 +1,7 @@
 # Tactical — Roadmap
 
+> **Status (2026-10-22):** M0–M8 playable and tested; M9/M10 partially done. Unchecked items below are what remains.
+
 Simultaneous-turn tactical squad shooter in the browser (Door Kickers × Frozen Synapse).
 Both players plan freely, confirm, then the world simulates **5 seconds**. Soldiers execute
 orders with a degree of autonomy (fire on sight, hold angle, take cover, throw grenades).
@@ -119,66 +121,66 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 **Done when:** a soldier walks around walls smoothly on a hand-made test map.
 
 ### M2 — Planning UI & turn loop (single player, no enemies)
-- [ ] Turn state machine: `PLANNING → SIMULATING → REVIEW → PLANNING`
-- [ ] Waypoint drawing: tap to add, drag handle to move, long-press → delete/insert (desktop: click, right-click)
-- [ ] Bottom action bar: soldier portraits (tap to select), Undo, Clear, Confirm — thumb reachable
-- [ ] Per-waypoint radial menu (long-press, finger-sized slices): speed, stance, fire mode, facing, wait
-- [ ] Facing tool: drag an arc to "hold this angle" (enlarged hit areas on touch)
-- [ ] Waypoints/handles drawn with screen-space size so they stay tappable when zoomed out
-- [ ] Path + timeline preview (ghost soldier, time stamps along the path)
-- [ ] Simulate exactly 300 ticks, then stop mid-path; remaining plan carries over
-- [ ] Undo/redo, clear plan per soldier
+- [x] Turn state machine: `PLANNING → SIMULATING → REVIEW → PLANNING` (`src/game/match.js`)
+- [x] Waypoint drawing: tap to add, hold for a running waypoint, drag (or hold-then-drag) to move; delete from the panel
+- [x] Bottom action bar: soldier chips (role, HP, waypoint count), Undo, GO — thumb reachable
+- [x] Per-waypoint editor — built as a bottom-sheet panel (better for thumbs than a radial): move, fire mode, crouch/stand, face, wait, sync, grenades, breach, look-while-moving
+- [x] Facing tool: "Face…" then tap the map (arrow drawn at the waypoint)
+- [x] Waypoints/handles drawn with screen-space size so they stay tappable when zoomed out
+- [x] Path + timeline preview: ETA label per waypoint and a marker where the soldier is at 5 s (no ghost soldier)
+- [x] Simulate exactly 300 ticks, then stop mid-path; remaining plan carries over
+- [x] Undo, clear plan per soldier, "hold here" (no redo)
 
 **Done when:** you can plan 4 soldiers, press Confirm, and watch them execute 5 s, then continue planning.
 
 ### M3 — Vision & combat core (hotseat 4v4) ← **first playable**
-- [ ] Vision cones (FOV, range), LOS via Rapier raycasts, high cover blocks, low cover blocks when crouched
-- [ ] Fog of war per team; last-known-position markers
-- [ ] **Perception & reaction model**
+- [x] Vision cones (FOV, range), LOS via Rapier raycasts, walls/doors/smoke block, low cover partially
+- [x] Fog of war per team; last-known-position ghost markers
+- [x] **Perception & reaction model**
   - spot time depends on distance, target stance/speed, inside vs outside facing arc
   - reaction time by state: holding angle ≈ 0.15 s · walking ≈ 0.4 s · running ≈ 0.8 s · +turn time if outside arc
-- [ ] Combat: turn-to-aim speed, accuracy cone (stance, movement, suppression, range), hitscan raycast, damage, death
-- [ ] Fire modes: on sight / hold fire / return fire only
-- [ ] Hotseat: P1 plans (screen hidden), P2 plans, simulate, both review
-- [ ] Win condition: elimination; turn limit draw
-- [ ] Replay/scrub of the last turn (store per-tick snapshots)
-- [ ] Determinism test: same inputs → identical state hash over 50 random turns
+- [x] Combat: turn-to-aim speed, hit chance (range, movement, stance, suppression, cover), damage, simultaneous deaths
+- [x] Fire modes: fire at will / hold fire (return-fire-only not built)
+- [x] Hotseat: P1 plans, handoff screen, P2 plans, simulate, both review
+- [x] Win condition: elimination; 30-turn limit draw
+- [x] Replay/scrub of the whole match (per-tick snapshots), speed control
+- [x] Determinism tests (random orders, full AI matches, two-client lockstep)
 
 **Done when:** two people on one PC play a full 4v4 match and holding an angle reliably beats running in.
 
 ### M4 — Roles & weapons
-- [ ] Role data: HP, speed, weapon, utility, perk
-- [ ] Weapons: damage, RoF, spread, range falloff, magazine/reload, aim time
-- [ ] Roles:
+- [x] Role data: HP, speed, weapon, gear, reaction multipliers (`src/sim/roles.js`)
+- [x] Weapons: damage, fire rate, accuracy falloff, shotgun damage falloff, magazine/reload, aim speed, suppression
+- [x] Roles:
   - **Rifleman** — balanced
   - **LMG** — suppression (enemies in fire lane get accuracy & reaction penalties), slow aim, deploy when holding
   - **Sniper** — high damage, very fast reaction when holding, huge penalty moving
   - **Breacher** — shotgun, breach charges, fast door entry
   - **Demolition** — extra frags, grenade launcher, destroys low cover
   - **Medic/Support** (later) — revive downed soldier, extra ammo
-- [ ] Squad selection screen (choose 4 from roster, max 1 sniper etc.)
-- [ ] Reload logic and auto-reload when safe
+- [x] Squad selection screen (tap a slot to cycle; max 1 sniper, 1 MG)
+- [x] Reload logic and auto-reload when safe
 
 ### M5 — Grenades, doors, utility
-- [ ] Rapier rigid-body grenades: arc preview, bounce, fuse timer
-- [ ] Frag (damage falloff + LOS check), flashbang (blind/deafen = huge reaction penalty), smoke (blocks vision volume)
-- [ ] Doors: open/closed/locked; open, kick, breach charge (stuns behind door)
-- [ ] Action triggers: "throw at waypoint", "throw when enemy spotted in area"
-- [ ] **Go-codes**: soldiers wait at waypoint until code A/B/C fires (planner sets when it fires in the 5 s window) — synchronized room entries
+- [x] Rapier rigid-body grenades: arc preview, bounce, fuse timer
+- [x] Frag (damage falloff + LOS check), flashbang (blind by LOS and facing), smoke (blocks vision)
+- [x] Doors: closed → open by walking through, or breach charge (stuns/wounds behind door). No locked/kick yet
+- [x] Action triggers: throw at waypoint ("throw when enemy spotted" not built)
+- [x] **Go-codes** — built as "Sync": hold until T seconds into the turn, for synchronised entries
 - [ ] Destructible low cover (demolition)
 
 ### M6 — Smarter autonomy
 - [ ] Take cover order: find nearest valid cover point relative to known threats
-- [ ] Auto-crouch behind low cover when holding
+- [x] Auto-crouch when pinned by suppression
 - [ ] Under fire behavior per soldier "doctrine": `hold position` / `return fire` / `seek cover`
-- [ ] Target priority: closest / most dangerous / the one in my arc
-- [ ] Teammate awareness: don't shoot through friendlies, call out spotted enemies (shared vision delay)
-- [ ] Suppression state machine (pinned soldiers move slower, can't aim well)
+- [x] Target priority: least turning, then closest
+- [x] Teammate awareness: hold fire when a friendly is in the line of fire; callouts turn idle teammates
+- [x] Suppression (pinned soldiers move slower, aim worse, react slower)
 
 ### M7 — Multiplayer (Trystero)
-- [ ] Lobby: create/join room by code (Trystero `joinRoom`, torrent or nostr strategy)
-- [ ] Handshake: version check, map/seed agreement, squad picks, side assignment
-- [ ] Lockstep protocol:
+- [x] Lobby: create/join room by code or `?room=` link (Trystero, Nostr strategy)
+- [x] Handshake: version check, map/mode/seed agreement, squad picks, side assignment
+- [x] Lockstep protocol:
   1. each peer sends `commit = hash(plan)` on Confirm (prevents plan-sniffing before the opponent confirms)
   2. when both committed, reveal full plans
   3. verify hashes, run `runTurn(state, planA, planB, seed+turn)`
@@ -186,30 +188,30 @@ PLANNING ─► plans validated ─► both confirmed ─► runTurn() 300 ticks
 - [ ] Planning timer synced (host-authoritative clock)
 - [ ] Disconnect/reconnect: rejoin with full state snapshot from peer
 - [ ] Chat + ping/emotes
-- [ ] Known limitation: both clients hold full state → fog of war is client-side (fine for friendly play; see M10)
+- [x] Known limitation: both clients hold full state → fog of war is client-side (fine for friendly play; see M10)
 
 ### M8 — Content & modes
-- [ ] 4–6 maps (house, warehouse, embassy, street, killhouse)
+- [x] 4 maps: Killhouse, Warehouse, Embassy, Streets (point-symmetric, validated by tests)
 - [ ] In-browser map editor (paint tiles, place doors/cover/spawns, export JSON)
-- [ ] Modes: Elimination, Attack/Defend (bomb/hostage/VIP), Hold the Zone
+- [x] Modes: Elimination, Hold the Zone (Attack/Defend not built)
 - [ ] Asymmetric deployment: defenders get pre-placement phase
 
 ### M9 — Presentation & feel
 - [ ] Low-poly soldier models + animations (idle, walk, run, crouch, aim, fire, die) — GLTF
-- [ ] Muzzle flash, tracers, impact decals, grenade explosions, smoke particles
-- [ ] Audio: spatial gunshots, footsteps, voice barks ("Contact!", "Reloading!", "Frag out!")
+- [x] Tracers, explosions, flash bursts, smoke clouds (no muzzle flash/decals yet)
+- [x] Audio: synthesised positional gunshots/explosions/doors/reloads (no footsteps or voice barks)
 - [ ] Replay camera follow + slow-mo kill cam
 - [ ] Full-match replay export/import (plans + seed = tiny file)
-- [ ] Tutorial / training missions vs bots
+- [x] How-to-play screen (no interactive tutorial)
 - [ ] UI polish, keybinds, settings, accessibility (colorblind team colors)
 
 ### M10 — Final / stretch
-- [ ] Single-player vs AI planner (bot generates plans using the same sim for lookahead)
+- [x] Single-player vs AI planner (heuristic, team-knowledge only; no sim lookahead)
 - [ ] 2v2 (2 soldiers each, 4 players) and 3+ team support
 - [ ] Optional authoritative server (Node running the same `sim/`) for ranked play with real hidden information
 - [ ] Squad progression / loadout customization / cosmetics
 - [ ] Spectator mode (late-joining peers receive plans only)
-- [ ] Installable PWA (manifest, offline cache, landscape lock option)
+- [x] Installable PWA (manifest, offline cache)
 - [ ] Deploy: static hosting (GitHub Pages / Netlify / Cloudflare Pages)
 
 ---

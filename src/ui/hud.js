@@ -231,6 +231,7 @@ export const overlays = {
       ${btn('start', '👁 Watch AI vs AI', { arg: 'aiVsAi' })}
       ${btn('start', '👥 Hotseat (2 players, 1 device)', { arg: 'hotseat' })}
       ${btn('onlineMenu', '🌐 Online (2 players)')}
+      ${btn('howTo', '❓ How to play')}
       <p class="small">Tap a soldier, tap the map to add waypoints, hold to add a running one.
       Tap a waypoint to edit it, drag it to move it. Pinch / twist / drag to move the camera.</p>
     </div>`,
@@ -290,6 +291,32 @@ export const overlays = {
       <h2>${esc(title)}</h2>
       <p>${esc(text)}</p>
       ${actions}
+    </div>`,
+  howTo: () => `
+    <div class="card howto">
+      <h2>How to play</h2>
+      <p><b>Plan</b> moves for your 4 soldiers, press <b>GO</b>, and both sides' plans play out
+      <b>at the same time for 5 seconds</b>. Then you plan again.</p>
+      <h3>Planning</h3>
+      <ul>
+        <li><b>Tap a soldier</b> (or a chip at the bottom) to select it.</li>
+        <li><b>Tap the map</b> to add a waypoint, <b>hold</b> to add a running one.</li>
+        <li><b>Tap a waypoint</b> to edit it, <b>drag</b> (or hold, then drag) to move it.</li>
+        <li>Each waypoint can: walk/run, fire at will/hold fire, <b>look while moving</b>, and on arrival
+          crouch, <b>face</b> a direction, wait, <b>sync</b> to a moment of the turn, throw a grenade or breach a door.</li>
+        <li>Labels show when each soldier arrives; the white ring is where they'll be when the 5 s end.</li>
+      </ul>
+      <h3>Fighting</h3>
+      <ul>
+        <li>Soldiers shoot on their own. <b>Reaction time</b> decides most fights: holding an angle
+          (standing still, facing the threat) ≈0.12 s, standing ≈0.3 s, walking ≈0.45 s, running ≈0.8 s.</li>
+        <li>Crouching behind low cover makes you harder to hit. Suppressive fire slows aim and reactions.</li>
+        <li>Doors block sight. Opening one takes a moment; a <b>breach charge</b> blows it and stuns whoever is behind.</li>
+        <li>Flashbangs blind, smoke blocks sight, frags hurt everyone nearby, friends included.</li>
+      </ul>
+      <h3>Camera</h3>
+      <ul><li>Drag to pan, pinch to zoom, twist to rotate. Tap a selected soldier's chip again to centre on them.</li></ul>
+      ${btn('menu', 'Back', { cls: 'go' })}
     </div>`,
   handoff: (teamName) => `
     <div class="card">

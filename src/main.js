@@ -452,6 +452,8 @@ function onAction(action, arg) {
       return hud.overlay(overlays.menu());
     case 'onlineMenu':
       return hud.overlay(overlays.online());
+    case 'howTo':
+      return hud.overlay(overlays.howTo());
     case 'onlineCreate':
       return enterRoom(randomRoomCode(), true);
     case 'onlineJoin': {
