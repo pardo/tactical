@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "e2e": "sh tests/e2e/run.sh"
   },
   "dependencies": {
     "@dimforge/rapier3d-deterministic-compat": "^0.21.0",
