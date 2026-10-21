@@ -6,6 +6,14 @@ import { doorAxis } from '../sim/doors.js';
 const WALL_VIS_HEIGHT = 1.4;
 const COVER_VIS_HEIGHT = 0.6;
 
+/** Box materials with a lighter top face: reads much better from the overhead camera. */
+function topLit(side, top) {
+  const sideMat = new THREE.MeshStandardMaterial({ color: side });
+  const topMat = new THREE.MeshStandardMaterial({ color: top });
+  // BoxGeometry face order: +x, -x, +y (top), -y, +z, -z
+  return [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
+}
+
 function instanced(geometry, material, cells, map, y) {
   const mesh = new THREE.InstancedMesh(geometry, material, Math.max(cells.length, 1));
   mesh.count = cells.length;
@@ -49,7 +57,7 @@ export function createMapView(scene, map, objective = null) {
   group.add(
     instanced(
       new THREE.BoxGeometry(1, WALL_VIS_HEIGHT, 1),
-      new THREE.MeshStandardMaterial({ color: 0x8a8f96 }),
+      topLit(0x6f747b, 0xb4b9bf),
       byTile[Tile.WALL],
       map,
       WALL_VIS_HEIGHT / 2,
@@ -58,7 +66,7 @@ export function createMapView(scene, map, objective = null) {
   const coverCells = byTile[Tile.LOW_COVER];
   const coverMesh = instanced(
     new THREE.BoxGeometry(0.9, COVER_VIS_HEIGHT, 0.9),
-    new THREE.MeshStandardMaterial({ color: 0x6b5a3e }),
+    topLit(0x5e4f37, 0x9c8762),
     coverCells,
     map,
     COVER_VIS_HEIGHT / 2,

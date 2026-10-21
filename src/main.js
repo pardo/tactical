@@ -4,7 +4,7 @@ import { TICK_RATE, TURN_TICKS, DT } from './sim/constants.js';
 import { makeWaypoint } from './sim/plan.js';
 import { createMatch, TEAM_NAMES } from './game/match.js';
 import { ROLES, WEAPONS, DEFAULT_SQUAD, cycleRole } from './sim/roles.js';
-import { createRecorder } from './game/recorder.js';
+import { createRecorder, frameVision as frameVisionSet } from './game/recorder.js';
 import { MAPS, DEFAULT_MAP, getMapDef, listMapIds, isCustomMap, saveCustomMap } from './maps/index.js';
 import { validateMapDef } from './maps/validate.js';
 import { createEditor, blankRows, SIZES } from './ui/editor.js';
@@ -261,6 +261,7 @@ function startMatch(mode, opts = {}) {
     watchSelected: null,
     netMessage: null,
     confirm: null,
+    toast: null,
   };
   ui.paused = false;
   ui.speed = 1;
@@ -386,6 +387,7 @@ function advance() {
 /** Effects and sounds for a frame we are playing through (not when scrubbing). */
 function playFrame(frame) {
   g.fx.play(frame);
+  toastFrame(frame);
   if (ui.speed <= 2) {
     const r = rig.state;
     audio.play(frame, { x: r.x, z: r.z, yaw: r.yaw, range: r.distance });
@@ -395,6 +397,21 @@ function playFrame(frame) {
 function turnTime(i) {
   const t = g.recorder.turnAt(i);
   return t ? { turn: t.turn, sec: (i - t.frame) / TICK_RATE } : { turn: 0, sec: 0 };
+}
+
+/** Short on-screen announcements for big moments, respecting fog of war. */
+function toastFrame(frame) {
+  const L = g.match.labels;
+  const viewer = g.match.viewerTeam;
+  const vision = viewer ? frameVisionSet(frame, viewer) : null;
+  const known = (id) => !vision || soldierOf(id).team === viewer || vision.has(id);
+  for (const e of frame.events) {
+    let text = null;
+    if (e.type === 'death' && known(e.id)) text = `☠ ${L[e.id]} down`;
+    else if (e.type === 'breach' && known(e.id)) text = `💥 ${L[e.id]} breaches a door`;
+    else if (e.type === 'blinded' && known(e.id)) text = `⚡ ${L[e.id]} blinded`;
+    if (text) g.toast = { text, until: performance.now() + 2200 };
+  }
 }
 
 function logFrame(i, frame) {
@@ -1008,7 +1025,8 @@ function updateHud() {
     if (g.mode === 'aiVsAi') {
       hud.bar({ kind: 'spectate', auto: ui.auto, canContinue: match.phase === 'turnEnd' && live });
     } else hud.bar(null);
-    hud.hint(match.phase === 'planning' && !live ? 'Watching replay · tap LIVE to keep planning' : '');
+    const toast = g.toast && performance.now() < g.toast.until ? g.toast.text : '';
+    hud.hint(match.phase === 'planning' && !live ? 'Watching replay · tap LIVE to keep planning' : toast);
   }
 }
 

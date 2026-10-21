@@ -16,11 +16,14 @@ async (page) => {
   await page.evaluate(() => (window.__tactical.ui.speed = 4));
   const deadline = Date.now() + 120000;
   let phase;
+  let sawToast = false;
   while (Date.now() < deadline) {
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(250);
     phase = await page.evaluate(() => window.__tactical.game.match.phase);
+    sawToast ||= /down/.test(await page.locator('#hint').innerText());
     if (phase === 'over') break;
   }
+  if (!sawToast) fail('no kill toast was shown');
   if (phase !== 'over') fail('match did not finish in time');
   await page.waitForTimeout(300);
   const card = await page.locator('#overlay .card h2').innerText();
