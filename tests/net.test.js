@@ -104,3 +104,128 @@ describe('online lockstep', () => {
     expect(peers.host.match.phase).toBe('waiting'); // host never accepts the forged plan
   });
 });
+
+/** Hub whose guest end can be replaced, to simulate a guest reloading the page. */
+function createHub() {
+  const ends = {};
+  const other = (role) => ends[role === 'host' ? 'guest' : 'host'];
+  const endpoint = (role) => {
+    const h = { msg: [], join: [], leave: [] };
+    const ep = {
+      h,
+      open: true,
+      api: {
+        send(msg) {
+          const o = other(role);
+          if (!ep.open || !o?.open) return;
+          const copy = JSON.parse(JSON.stringify(msg));
+          for (const cb of o.h.msg) cb(copy);
+        },
+        onMessage: (cb) => h.msg.push(cb),
+        onPeerJoin: (cb) => h.join.push(cb),
+        onPeerLeave: (cb) => h.leave.push(cb),
+        leave() {
+          ep.open = false;
+          for (const cb of other(role)?.h.leave ?? []) cb();
+        },
+      },
+    };
+    ends[role] = ep;
+    return ep.api;
+  };
+  return {
+    host: () => endpoint('host'),
+    guest: () => endpoint('guest'),
+    connect() {
+      for (const cb of ends.host.h.join) cb();
+      for (const cb of ends.guest.h.join) cb();
+    },
+  };
+}
+
+describe('online reconnect', () => {
+  it('a guest that drops mid-turn rejoins, catches up by re-simulation, and stays in sync', async () => {
+    const { fastForward } = await import('../src/game/replay.js');
+    const hub = createHub();
+    const mk = (side, transport, isHost) => {
+      const p = { side };
+      p.session = createSession({
+        transport,
+        isHost,
+        onEvent: (e) => {
+          if (e.type === 'start' || e.type === 'resume') {
+            p.match = createMatch({ mode: 'online', mapDef: killhouse, mapId: 'killhouse', seed: e.seed, squads: e.squads, localTeam: e.localTeam });
+            p.ai = createAI(e.localTeam, 3);
+            if (e.type === 'resume') fastForward(p.match, e.history);
+          } else if (e.type === 'plans') p.match.setRemotePlans(e.team, e.plans);
+          else if (e.type === 'desync') p.desync = e;
+        },
+      });
+      return p;
+    };
+    const host = mk('host', hub.host(), true);
+    let guest = mk('guest', hub.guest(), false);
+    hub.connect();
+    host.session.ready(['breacher', 'rifleman', 'lmg', 'sniper']);
+    guest.session.ready(['breacher', 'rifleman', 'lmg', 'sniper']);
+
+    const planAndCommit = (p) => {
+      if (p.match.phase !== 'planning') return;
+      const { plans } = p.ai.plan(p.match.world);
+      p.match.drafts[p.session.localTeam] = p.session.commit(p.match.turn, plans);
+      p.match.confirm();
+    };
+    const finishTurn = (p) => {
+      while (p.match.stepSim()) {
+        p.ai.observe(p.match.world);
+        if (p.match.phase !== 'simulating') break;
+      }
+      p.session.sendState(p.match.turn, hashWorld(p.match.world));
+    };
+
+    // Three normal turns.
+    for (let t = 0; t < 3 && host.match.phase !== 'over'; t++) {
+      for (const p of [host, guest]) p.match.beginTurn();
+      for (const p of [host, guest]) planAndCommit(p);
+      for (const p of [host, guest]) finishTurn(p);
+    }
+    expect(host.match.phase).not.toBe('over');
+
+    // Turn 4: host commits, then the guest's page dies before it commits.
+    host.match.beginTurn();
+    guest.match.beginTurn();
+    planAndCommit(host);
+    expect(host.match.phase).toBe('waiting');
+    guest.session.leave();
+
+    // A fresh guest client joins the room; the host resumes it.
+    guest = mk('guest2', hub.guest(), false);
+    hub.connect();
+    host.session.resume({
+      seed: host.match.seed,
+      squads: host.match.squads,
+      map: 'killhouse',
+      mode: 'elimination',
+      history: host.match.history,
+      turn: host.match.turn,
+    });
+    expect(guest.match.turn).toBe(3);
+    // Host is waiting in turn 4 with nothing simulated yet: both worlds are at the end of turn 3.
+    expect(hashWorld(guest.match.world)).toBe(hashWorld(host.match.world));
+
+    // Guest plans turn 4 → both simulate it → keep playing to the end in sync.
+    guest.match.beginTurn();
+    planAndCommit(guest);
+    expect(host.match.phase).toBe('simulating');
+    expect(guest.match.phase).toBe('simulating');
+    for (const p of [host, guest]) finishTurn(p);
+    while (host.match.phase !== 'over' && host.match.turn < 40) {
+      for (const p of [host, guest]) p.match.beginTurn();
+      for (const p of [host, guest]) planAndCommit(p);
+      for (const p of [host, guest]) finishTurn(p);
+      expect(hashWorld(guest.match.world)).toBe(hashWorld(host.match.world));
+    }
+    expect(host.desync ?? guest.desync).toBeUndefined();
+    expect(guest.match.world.winner).toBe(host.match.world.winner);
+  });
+});

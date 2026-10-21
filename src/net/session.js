@@ -14,6 +14,9 @@ const randomToken = () => Array.from(crypto.getRandomValues(new Uint32Array(4)),
  *           commits it sends `reveal {turn, payload, salt}`. Committing a hash
  *           first means nobody can read the other plan and then change theirs.
  *   check:  after each turn both send `state {turn, hash}` of the world.
+ *   rejoin: if the guest reconnects mid-match the host sends `resume {seed,
+ *           squads, map, mode, history}` and re-sends its pending commit; the
+ *           guest re-simulates the history (deterministic) and carries on.
  *
  * transport: { send(msg), onMessage(cb), onPeerJoin(cb), onPeerLeave(cb), leave() }
  * onEvent receives { type: 'peerJoined' | 'peerLeft' | 'start' | 'remoteCommitted'
@@ -108,6 +111,18 @@ export function createSession({ transport, isHost, onEvent }) {
       case 'state':
         turnState(msg.turn).remoteState = String(msg.hash);
         return compareState(msg.turn);
+      case 'resume':
+        if (isHost) return;
+        started = true;
+        return onEvent({
+          type: 'resume',
+          seed: msg.seed >>> 0,
+          squads: { A: sanitizeSquad(msg.squads?.A), B: sanitizeSquad(msg.squads?.B) },
+          map: String(msg.map ?? ''),
+          mode: String(msg.mode ?? ''),
+          history: Array.isArray(msg.history) ? msg.history : [],
+          localTeam,
+        });
     }
   });
 
@@ -138,6 +153,17 @@ export function createSession({ transport, isHost, onEvent }) {
       transport.send({ t: 'commit', turn, hash: sha256(`${payload}|${salt}`) });
       maybeReveal(turn);
       return JSON.parse(payload);
+    },
+
+    /** Host: bring a reconnected guest up to date (see `rejoin` above). */
+    resume({ seed, squads, map, mode, history, turn }) {
+      transport.send({ t: 'resume', seed, squads, map, mode, history });
+      // Forget the old guest's commit for the current turn and re-announce ours.
+      const ts = turns.get(turn);
+      if (!ts) return;
+      ts.remote = undefined;
+      ts.revealed = false;
+      if (ts.local) transport.send({ t: 'commit', turn, hash: sha256(`${ts.local.payload}|${ts.local.salt}`) });
     },
 
     sendState(turn, hash) {

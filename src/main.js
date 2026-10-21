@@ -134,6 +134,20 @@ function onNetEvent(e) {
     case 'peerJoined':
       net.connected = true;
       if (!g) hud.overlay(lobbyOverlay());
+      else if (net.isHost && g.mode === 'online') {
+        // The guest came back (reload / dropped connection): send them the match so far.
+        g.netMessage = null;
+        ui.paused = false;
+        net.session.resume({
+          seed: g.match.seed,
+          squads: g.match.squads,
+          map: g.match.mapId,
+          mode: g.match.gameMode,
+          history: g.match.history,
+          turn: g.match.turn,
+        });
+        g.log.push({ i: g.cursor, team: null, cls: 'note', text: 'Opponent reconnected' });
+      }
       break;
     case 'peerLeft':
       net.connected = false;
@@ -144,6 +158,17 @@ function onNetEvent(e) {
       break;
     case 'versionMismatch':
       hud.overlay(overlays.message('Version mismatch', 'Both players need the same game version. Reload and try again.'));
+      break;
+    case 'resume':
+      startMatch('online', {
+        seed: e.seed,
+        squads: e.squads,
+        localTeam: e.localTeam,
+        mapId: MAPS[e.map] ? e.map : ui.mapId,
+        gameMode: MODES[e.mode] ? e.mode : ui.gameMode,
+        history: e.history,
+      });
+      g?.log.push({ i: g.cursor, team: null, cls: 'note', text: `Rejoined at turn ${g.match.turn}` });
       break;
     case 'start':
       startMatch('online', {
@@ -232,6 +257,21 @@ function startMatch(mode, opts = {}) {
       },
     });
     g.cursor = 0;
+    return;
+  }
+  if (opts.history?.length) {
+    // Rejoining an online match: re-simulate what we missed, then continue live.
+    fastForward(match, opts.history, {
+      onTurn: () => onPhase(),
+      onTick: (w) => {
+        g.recorder.record(w);
+        logFrame(frames().length - 1, frames()[frames().length - 1]);
+      },
+    });
+    g.cursor = frames().length - 1;
+    if (match.phase === 'over') return;
+    // A turn still simulating on the host is already in the history; otherwise plan the next one.
+    if (match.phase === 'turnEnd') nextTurn();
     return;
   }
   nextTurn();
