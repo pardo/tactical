@@ -23,6 +23,9 @@ cover and turn toward threats, so *how* you move (holding an angle vs. running i
 - Sound: running, doors, gunfire and breaches are heard through walls; the listening side sees a
   "sound ghost" where the noise came from, idle soldiers turn toward it, and the AI hunts it.
 - Every planning button explains itself when tapped, and each waypoint is summarised in words.
+- Go codes: soldiers can wait at a waypoint (over several turns) for Alpha/Bravo/Charlie, released with
+  a tap before GO. Grenades that would go off after the 5 s are flagged ⏭; live ones show a fuse
+  countdown and blast radius while planning.
 - Save any match as a replay file (a few KB) and load it to rewatch.
 - Installable as an app (PWA) from the browser menu when served over https.
 

@@ -232,7 +232,9 @@ export function createHud(root, onAction) {
       set(
         'panel',
         JSON.stringify(model),
-        `<div class="row info">${esc(model.label)} · waypoint ${model.index + 1}/${model.count} · arrive ${model.eta}</div>
+        `<div class="row info">${esc(model.label)} · waypoint ${model.index + 1}/${model.count} · arrive ${model.eta}${(model.booms ?? [])
+          .map((b) => ` · ${b.icon} goes off ${Number.isFinite(b.at) ? `${b.at.toFixed(1)}s` : 'later'}${b.late ? ' <b class="warn">⏭ next turn</b>' : ''}`)
+          .join('')}</div>
          <div class="row seg">
            ${btn('move', '🚶 Walk', { arg: 'walk', cls: w.move === 'walk' ? 'on' : '', title: tip('move:walk') })}${btn('move', '🏃 Run', { arg: 'run', cls: w.move === 'run' ? 'on' : '', title: tip('move:run') })}
            <span class="sep"></span>
@@ -388,6 +390,9 @@ export const overlays = {
         <li>Crouching behind low cover makes you harder to hit. Suppressive fire slows aim and reactions.</li>
         <li>Doors block sight. Opening one takes a moment; a <b>breach charge</b> blows it and stuns whoever is behind.</li>
         <li>Flashbangs blind, smoke blocks sight, frags hurt everyone nearby, friends included.</li>
+        <li>A grenade goes off its fuse after leaving the hand (frag 2.2 s, flash 1.5 s, smoke 1.2 s). One that would go off
+          after the 5 s is marked <b>⏭</b> on the plan and goes off early next turn; while you plan, live grenades show a
+          countdown and their blast radius so you can get clear.</li>
       </ul>
       <h3>Sound</h3>
       <ul>

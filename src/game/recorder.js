@@ -49,7 +49,7 @@ export function snapshot(world, prev = null) {
     objective: world.objective && { score: { ...world.objective.score }, holder: world.objective.holder },
     grenades: world.grenades.map((g) => {
       const p = g.body.translation();
-      return { id: g.id, kind: g.kind, x: p.x, y: p.y, z: p.z };
+      return { id: g.id, kind: g.kind, x: p.x, y: p.y, z: p.z, fuse: g.fuse };
     }),
     events: world.events.slice(),
     heard: heardMemory(world, prev),

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GRENADE } from '../sim/grenades.js';
 
 /** Short-lived effects driven by sim events: tracers, explosions, plus grenade meshes. */
 /** @param mapSize { width, height } so cell events can be placed in the world */
@@ -11,6 +12,9 @@ export function createFxView(scene, mapSize = { width: 0, height: 0 }) {
   const grenadeGeo = new THREE.SphereGeometry(0.09, 10, 8);
   const grenadeMat = new THREE.MeshStandardMaterial({ color: 0x2f3b23 });
   const blastGeo = new THREE.SphereGeometry(1, 20, 14);
+  // Danger zone of a live grenade, shown while the turn isn't playing (e.g. a late throw carried into planning).
+  const dangerGeo = new THREE.RingGeometry(0.94, 1, 48);
+  const dangerMat = { frag: 0xff5a4d, flash: 0xffffff, smoke: 0xb9b2a4 };
 
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffe28a, transparent: true, depthWrite: false });
   const puffMat = new THREE.MeshBasicMaterial({ color: 0xb9b2a4, transparent: true, depthWrite: false });
@@ -136,7 +140,8 @@ export function createFxView(scene, mapSize = { width: 0, height: 0 }) {
     },
 
     /** Grenades in flight, interpolated between frames. */
-    drawGrenades(prev, curr, alpha) {
+    /** @param showDanger draw each grenade's blast radius (when the turn is not playing) */
+    drawGrenades(prev, curr, alpha, showDanger = false) {
       const prevById = new Map(prev.grenades.map((g) => [g.id, g]));
       const seen = new Set();
       for (const g of curr.grenades) {
@@ -145,15 +150,26 @@ export function createFxView(scene, mapSize = { width: 0, height: 0 }) {
         if (!mesh) {
           mesh = new THREE.Mesh(grenadeGeo, grenadeMat);
           mesh.castShadow = true;
-          group.add(mesh);
+          const danger = new THREE.Mesh(
+            dangerGeo,
+            new THREE.MeshBasicMaterial({ color: dangerMat[g.kind] ?? 0xffffff, transparent: true, opacity: 0.7, depthWrite: false }),
+          );
+          danger.rotation.x = -Math.PI / 2;
+          danger.scale.setScalar(GRENADE[g.kind]?.radius ?? 1);
+          mesh.userData.danger = danger;
+          group.add(mesh, danger);
           grenadeMeshes.set(g.id, mesh);
         }
         const p = prevById.get(g.id) ?? g;
         mesh.position.set(p.x + (g.x - p.x) * alpha, p.y + (g.y - p.y) * alpha, p.z + (g.z - p.z) * alpha);
+        const danger = mesh.userData.danger;
+        danger.visible = showDanger;
+        danger.position.set(mesh.position.x, 0.05, mesh.position.z);
       }
       for (const [id, mesh] of grenadeMeshes) {
         if (seen.has(id)) continue;
-        group.remove(mesh);
+        group.remove(mesh, mesh.userData.danger);
+        mesh.userData.danger.material.dispose();
         grenadeMeshes.delete(id);
       }
     },

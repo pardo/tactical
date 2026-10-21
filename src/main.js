@@ -1,7 +1,7 @@
 import { helpFor, describeWaypoint } from './ui/help.js';
 import './style.css';
 import { initPhysics } from './sim/physics.js';
-import { TICK_RATE, TURN_TICKS, DT } from './sim/constants.js';
+import { TICK_RATE, TURN_TICKS, TURN_SECONDS, DT } from './sim/constants.js';
 import { makeWaypoint, GO_CODE_NAMES } from './sim/plan.js';
 import { createMatch, TEAM_NAMES } from './game/match.js';
 import { ROLES, WEAPONS, DEFAULT_SQUAD, cycleRole } from './sim/roles.js';
@@ -20,7 +20,7 @@ import { createCameraRig } from './render/cameraRig.js';
 import { createTapMarker } from './render/marker.js';
 import { attachGestures } from './ui/gestures.js';
 import { createKeyboard } from './ui/keyboard.js';
-import { createHud, overlays, actionLabel } from './ui/hud.js';
+import { createHud, overlays, actionLabel, GRENADE_ICON } from './ui/hud.js';
 import { createLabels } from './ui/labels.js';
 import { createPlanning } from './ui/planning.js';
 import { startLoop } from './loop.js';
@@ -60,8 +60,9 @@ const keyboard = createKeyboard();
 const audio = createAudio();
 // Browsers only start audio from a user gesture.
 window.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
-const labels = createLabels(document.getElementById('ui'));
 const hud = createHud(document.getElementById('ui'), onAction);
+// After the HUD: createHud replaces #ui's contents, which would drop an earlier labels layer.
+const labels = createLabels(document.getElementById('ui'));
 let viewW = 1;
 let viewH = 1;
 let rig = null;
@@ -1050,6 +1051,7 @@ function updateHud() {
         label: match.labels[s.id],
         index: P.state.wpIndex,
         count: P.state.drafts[s.id].length,
+        booms: (mark?.booms ?? []).map((b) => ({ icon: GRENADE_ICON[b.kind], at: b.at, late: b.at > TURN_SECONDS })),
         eta: mark ? (mark.held ? `after go code ${GO_CODE_NAMES[mark.held]}` : Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : 'unreachable') : '–',
         gear: s.gear,
         charges: s.charges,
@@ -1147,7 +1149,14 @@ function drawPlans() {
   wps.forEach((w, i) => {
     const mark = est?.marks[i];
     const eta = mark?.held ? `⏸${mark.held}` : mark && Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : '✕';
-    const icons = w.actions.map((a) => actionLabel(a).split(' ')[0]).join('');
+    // A grenade that would go off after the 5 s is marked ⏭ (it carries over into next turn).
+    let k = 0;
+    const icons = w.actions
+      .map((a) => {
+        const icon = actionLabel(a).split(' ')[0];
+        return a.type === 'grenade' && mark?.booms[k++]?.at > TURN_SECONDS ? `${icon}⏭` : icon;
+      })
+      .join('');
     const cls = `${i === P.state.wpIndex ? 'sel' : ''} ${mark && !mark.held && mark.arrive > TURN_TICKS / TICK_RATE ? 'late' : ''}`;
     labels.add(`${i + 1} · ${eta}${icons ? ` ${icons}` : ''}`, { x: w.x, y: 0.2, z: w.z }, view.camera, viewW, viewH, cls);
   });
@@ -1215,7 +1224,14 @@ startLoop({
         if (s?.alive && visible) rig.focusOn(s.x, s.z);
       }
       g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones, playing: moving && !ui.paused, dt });
-      g.fx.drawGrenades(prev, curr, a);
+      // Not playing (planning, paused, scrubbing): show live grenades' fuse and blast radius.
+      const still = !moving || ui.paused;
+      g.fx.drawGrenades(prev, curr, a, still);
+      if (still) {
+        for (const gr of curr.grenades) {
+          labels.add(`${GRENADE_ICON[gr.kind]} ${Math.max(0, gr.fuse ?? 0).toFixed(1)}s`, { x: gr.x, y: 0.3, z: gr.z }, view.camera, viewW, viewH, 'danger');
+        }
+      }
       g.fx.drawSmokes(curr);
       g.mapView.userData.setDoors(curr.doors);
       g.mapView.userData.setDestroyed(g.match.world.destroyed.slice(0, curr.destroyed ?? 0));

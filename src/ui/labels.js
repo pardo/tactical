@@ -4,7 +4,7 @@ import * as THREE from 'three';
 export function createLabels(container) {
   const layer = document.createElement('div');
   layer.className = 'labels';
-  container.appendChild(layer);
+  container.prepend(layer); // first, so HUD panels draw over the labels
   const pool = [];
   const v3 = new THREE.Vector3();
   let used = 0;

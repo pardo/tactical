@@ -39,6 +39,10 @@ async (page) => {
   await page.waitForTimeout(100);
   s = await st();
   if (s.wps.length !== 1) fail(`expected 1 waypoint after tap, got ${s.wps.length}`);
+  // The waypoint's number and arrival time are shown on the map.
+  await page.locator('.label', { hasText: /^1 · \d+\.\ds/ }).first().waitFor({ timeout: 2000 }).catch(() => {});
+  const wpLabel = await page.locator('.labels .label').first().innerText().catch(() => '');
+  if (!/^1 · \d+\.\ds/.test(wpLabel)) fail(`no waypoint ETA label: "${wpLabel}"`);
 
   await page.getByRole('button', { name: '🏃 Run' }).tap();
   // Phones have no tooltips: tapping a control explains it in the panel.

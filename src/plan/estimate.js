@@ -3,6 +3,7 @@ import { worldToCell } from '../sim/map.js';
 import { SPEED, ACTION_TIME } from '../sim/soldier/orders.js';
 import { DOOR_OPEN_TIME } from '../sim/doors.js';
 import { TURN_SECONDS } from '../sim/constants.js';
+import { GRENADE } from '../sim/grenades.js';
 
 const FACE_TIME = 0.4; // rough average turn time
 const COVER_TIME = 1.2; // short hop to cover + crouch (destination unknown until it runs)
@@ -44,7 +45,8 @@ function doorsCrossed(map, a, b, closedDoors, counted) {
  * @param released go codes released this turn; waiting on any other code holds the soldier
  * @returns {{
  *   legs: { points: {x,z}[], move: string, blocked: boolean }[],
- *   marks: { arrive: number, done: number, held?: string }[], // held: go code this waypoint waits behind
+ *   marks: { arrive: number, done: number, held?: string, booms: { kind, at }[] }[],
+ *     // held: go code this waypoint waits behind · booms: when its grenades go off (turn seconds)
  *   atTurnEnd: {x,z} | null,   // null if the plan finishes before the turn ends
  *   end: {x,z}, total: number }}
  */
@@ -70,7 +72,7 @@ export function estimatePlan(map, start, waypoints, closedDoors = null, released
     const path = findPath(map, pos.x, pos.z, wp.x, wp.z);
     if (!path) {
       legs.push({ points: [pos, { x: wp.x, z: wp.z }], move: wp.move, blocked: true });
-      marks.push({ arrive: Infinity, done: Infinity, ...(held && { held }) });
+      marks.push({ arrive: Infinity, done: Infinity, booms: [], ...(held && { held }) });
       break;
     }
     if (wp.move === 'run') stance = 'stand';
@@ -83,13 +85,16 @@ export function estimatePlan(map, start, waypoints, closedDoors = null, released
     legs.push({ points, move: wp.move, blocked: false });
     const arrive = t;
     const heldBefore = held;
+    const booms = [];
     pos = points[points.length - 1];
     for (const a of wp.actions) {
       if (a.type === 'stance') stance = a.stance;
+      // The fuse starts when the grenade leaves the hand, after the wind-up.
+      if (a.type === 'grenade') booms.push({ kind: a.kind, at: t + ACTION_TIME.grenade + GRENADE[a.kind].fuse });
       if (a.type === 'code' && !released.includes(a.code)) held ??= a.code;
       span(pos, pos, actionDuration(a, t, released));
     }
-    marks.push({ arrive, done: t, ...(heldBefore && { held: heldBefore }) });
+    marks.push({ arrive, done: t, booms, ...(heldBefore && { held: heldBefore }) });
   }
   return { legs, marks, atTurnEnd, end: pos, total: t };
 }

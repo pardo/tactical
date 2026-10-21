@@ -119,6 +119,7 @@ button.danger { color: #ff7a6b; }
 #bottom .panel { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 12px; background: var(--bg); pointer-events: auto; }
 #bottom .row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 #bottom .row.info { color: var(--muted); font-size: 12px; padding: 0 2px; }
+#bottom .row.info .warn { color: #ff8a70; font-weight: 600; }
 #bottom .row .sep { flex: 0 0 8px; }
 #bottom .row button { flex: 0 0 auto; min-height: 38px; padding: 0 9px; font-size: 13px; }
 /* Waypoint orders: two rows that scroll sideways, so the panel doesn't cover half a phone screen. */
@@ -193,6 +194,7 @@ button.danger { color: #ff7a6b; }
 }
 .label.sel { background: rgba(255, 211, 77, 0.92); color: #231a00; font-weight: 600; }
 .label.late { opacity: 0.55; }
+.label.danger { background: rgba(160, 30, 20, 0.9); color: #fff; font-weight: 600; }
 
 @media (max-width: 520px) {
   .chip { min-width: 44px; padding: 0 4px; }
