@@ -24,6 +24,7 @@ export function snapshot(world) {
     })),
     smokes: world.smokes.map((sm) => ({ x: sm.x, z: sm.z, r: sm.r })),
     doors: world.doors.map((d) => d.state),
+    objective: world.objective && { score: { ...world.objective.score }, holder: world.objective.holder },
     grenades: world.grenades.map((g) => {
       const p = g.body.translation();
       return { id: g.id, kind: g.kind, x: p.x, y: p.y, z: p.z };

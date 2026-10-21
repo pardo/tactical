@@ -207,6 +207,10 @@ export function createHud(root, onAction) {
   };
 }
 
+const settingsRows = ({ mapName, modeName, modeHelp }) => `
+  <div class="setting">${btn('cycleMap', `🗺 ${esc(mapName)} ▸`)}${btn('cycleMode', `🎯 ${esc(modeName)} ▸`)}</div>
+  <p class="small">${esc(modeHelp)}</p>`;
+
 const ROLE_HELP = [
   'RF Rifleman: all-rounder, one of each grenade',
   'MG Machine gunner: suppresses (slows enemy aim and reactions), poor on the move',
@@ -229,11 +233,16 @@ export const overlays = {
       <p class="small">Tap a soldier, tap the map to add waypoints, hold to add a running one.
       Tap a waypoint to edit it, drag it to move it. Pinch / twist / drag to move the camera.</p>
     </div>`,
-  /** @param teams [{ team, name, squad: [{ role, label, short }] }] */
-  squad: (teams, mode) => `
+  /**
+   * Match setup: map, game mode and (for human teams) squads.
+   * @param teams [{ team, name, squad: [{ role, label, short }] }]
+   * @param settings { mapName, modeName, modeHelp }
+   */
+  squad: (teams, mode, settings) => `
     <div class="card">
-      <h2>Choose your squad</h2>
-      <p class="small">Tap a slot to change its role. Max 1 sniper and 1 machine gunner.</p>
+      <h2>Match setup</h2>
+      ${settingsRows(settings)}
+      ${teams.length ? '<p class="small">Tap a slot to change its role. Max 1 sniper and 1 machine gunner.</p>' : ''}
       ${teams
         .map(
           (t) => `<div class="squad team-${t.team}"><b>${esc(t.name)}</b><div class="slots">${t.squad
@@ -241,7 +250,7 @@ export const overlays = {
             .join('')}</div></div>`,
         )
         .join('')}
-      <div class="roles small">${ROLE_HELP}</div>
+      ${teams.length ? `<div class="roles small">${ROLE_HELP}</div>` : ''}
       ${btn('startMatch', 'Deploy ▶', { arg: mode, cls: 'go' })}
       ${btn('menu', 'Back')}
     </div>`,
@@ -258,10 +267,11 @@ export const overlays = {
       <p class="small">Peer-to-peer: both players need internet. The room code is all you share.</p>
     </div>`,
   /** @param squad [{label, short}] | null to hide the picker */
-  lobby: ({ code, isHost, connected, ready, squad, team, teamName }) => `
+  lobby: ({ code, isHost, connected, ready, squad, team, teamName, settings }) => `
     <div class="card">
       <h2>Room ${esc(code)}</h2>
       <p>You are <b class="t-${team}">${esc(teamName)}</b>${isHost ? ' (host)' : ''}</p>
+      ${isHost && !ready ? settingsRows(settings) : ''}
       ${isHost ? `${btn('shareRoom', '🔗 Share invite link')}` : ''}
       <p>${connected ? '✅ Opponent connected' : '⏳ Waiting for opponent…'}</p>
       ${

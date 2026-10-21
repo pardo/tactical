@@ -9,7 +9,7 @@ const randomToken = () => Array.from(crypto.getRandomValues(new Uint32Array(4)),
  * Two-player online session over any transport, lockstep style: only plans
  * travel, and both peers run the deterministic sim.
  *
- *   lobby:  both send `ready {squad}` → host sends `start {seed, squads}`
+ *   lobby:  both send `ready {squad}` → host sends `start {seed, squads, map, mode}`
  *   turn:   each sends `commit {turn, hash}` on GO; once a peer has both
  *           commits it sends `reveal {turn, payload, salt}`. Committing a hash
  *           first means nobody can read the other plan and then change theirs.
@@ -24,6 +24,7 @@ export function createSession({ transport, isHost, onEvent }) {
   const remoteTeam = isHost ? 'B' : 'A';
   const turns = new Map(); // turn → { local, remote, revealed, localState, remoteState }
   let localSquad = null;
+  let options = {};
   let remoteSquad = null;
   let started = false;
   let peer = false;
@@ -38,8 +39,8 @@ export function createSession({ transport, isHost, onEvent }) {
     started = true;
     const seed = crypto.getRandomValues(new Uint32Array(1))[0] >>> 1;
     const squads = { A: localSquad, B: remoteSquad };
-    transport.send({ t: 'start', seed, squads });
-    onEvent({ type: 'start', seed, squads, localTeam });
+    transport.send({ t: 'start', seed, squads, ...options });
+    onEvent({ type: 'start', seed, squads, localTeam, ...options });
   }
 
   function maybeReveal(n) {
@@ -76,7 +77,14 @@ export function createSession({ transport, isHost, onEvent }) {
       case 'start':
         if (isHost || started) return;
         started = true;
-        return onEvent({ type: 'start', seed: msg.seed >>> 0, squads: { A: sanitizeSquad(msg.squads?.A), B: sanitizeSquad(msg.squads?.B) }, localTeam });
+        return onEvent({
+          type: 'start',
+          seed: msg.seed >>> 0,
+          squads: { A: sanitizeSquad(msg.squads?.A), B: sanitizeSquad(msg.squads?.B) },
+          map: String(msg.map ?? ''),
+          mode: String(msg.mode ?? ''),
+          localTeam,
+        });
       case 'commit': {
         const ts = turnState(msg.turn);
         if (ts.remote) return;
@@ -110,8 +118,10 @@ export function createSession({ transport, isHost, onEvent }) {
       return peer;
     },
 
-    ready(squad) {
+    /** @param opts host only: { map, mode } sent to the guest with `start` */
+    ready(squad, opts = {}) {
       localSquad = sanitizeSquad(squad);
+      options = { map: opts.map, mode: opts.mode };
       if (peer) transport.send({ t: 'ready', v: PROTOCOL_VERSION, squad: localSquad });
       maybeStart();
     },

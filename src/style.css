@@ -207,3 +207,4 @@ button.danger { color: #ff7a6b; }
 .card .error { color: #ff7a6b; }
 .t-A { color: var(--blue); }
 .t-B { color: var(--red); }
+.setting { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }

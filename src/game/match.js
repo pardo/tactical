@@ -21,9 +21,9 @@ export function randomSquad(seed) {
   return sanitizeSquad(Array.from({ length: 12 }, () => ROLE_IDS[rng.int(0, ROLE_IDS.length)]));
 }
 
-export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A' }) {
+export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A', gameMode = 'elimination' }) {
   const map = parseMap(mapDef);
-  const world = createWorld(seed, map);
+  const world = createWorld(seed, map, gameMode);
   const aiSquad = (t) => (mode === 'aiVsAi' ? randomSquad(seed + (t === 'A' ? 1 : 2)) : DEFAULT_SQUAD);
   spawnSquads(world, { A: squads.A ?? aiSquad('A'), B: squads.B ?? aiSquad('B') });
 
@@ -45,6 +45,7 @@ export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A' }
 
   const m = {
     mode,
+    gameMode,
     world,
     map,
     controllers,

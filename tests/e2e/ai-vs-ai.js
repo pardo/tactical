@@ -5,6 +5,14 @@ async (page) => {
   };
   await page.goto('http://localhost:5173/');
   await page.getByRole('button', { name: 'Watch AI vs AI' }).tap();
+  // Setup: switch to the Warehouse map and zone mode.
+  await page.getByRole('button', { name: /Killhouse/ }).tap();
+  await page.getByRole('button', { name: /Elimination/ }).tap();
+  const setup = await page.locator('#overlay .card').innerText();
+  if (!/Warehouse/.test(setup) || !/Hold the zone/.test(setup)) fail(`setup did not change: ${setup}`);
+  await page.getByRole('button', { name: 'Deploy ▶' }).tap();
+  const mapName = await page.evaluate(() => window.__tactical.game.match.map.name);
+  if (mapName !== 'Warehouse') fail(`playing on ${mapName}`);
   await page.evaluate(() => (window.__tactical.ui.speed = 4));
   const deadline = Date.now() + 120000;
   let phase;
@@ -27,5 +35,5 @@ async (page) => {
     return { cursor: g.cursor, frames: g.recorder.frames.length, turns: g.recorder.turns.length };
   });
   if (r.cursor > r.frames / 4) fail(`rewatch did not restart (cursor ${r.cursor})`);
-  return `ok: "${card}" after ${r.turns} turns, ${r.frames} frames recorded, rewatch playing`;
+  return `ok: Warehouse/zone "${card}" after ${r.turns} turns, ${r.frames} frames recorded, rewatch playing`;
 }

@@ -11,6 +11,7 @@ import { sanitizeWaypoints } from './plan.js';
 import { PI } from './fmath.js';
 import { DEFAULT_SQUAD, sanitizeSquad } from './roles.js';
 import { createDoors } from './doors.js';
+import { createObjective, updateObjective } from './objective.js';
 
 // Physical heights, used for line of sight. The renderer draws walls shorter for readability.
 export const WALL_HEIGHT = 2.4;
@@ -21,7 +22,7 @@ export const TEAMS = ['A', 'B'];
  * Deterministic world state. No Three.js, DOM, or wall-clock time in here.
  * Soldiers live in an array ordered by id so iteration order is stable.
  */
-export function createWorld(seed, map) {
+export function createWorld(seed, map, mode = 'elimination') {
   const physics = createPhysicsWorld();
   physics.createCollider(RAPIER.ColliderDesc.cuboid(map.width / 2, 0.1, map.height / 2).setTranslation(0, -0.1, 0));
   addMapColliders(physics, map);
@@ -40,6 +41,7 @@ export function createWorld(seed, map) {
     smokes: [],
     events: [],
     winner: null,
+    objective: createObjective(mode),
     nextId: 1,
   };
 }
@@ -124,6 +126,7 @@ export function step(world) {
   const a = alive('A');
   const b = alive('B');
   if (!a || !b) world.winner = a ? 'A' : b ? 'B' : 'draw';
+  else updateObjective(world);
 }
 
 function hashValue(h, v) {
@@ -153,6 +156,7 @@ export function hashWorld(world) {
   }
   for (const s of world.smokes) h.num(s.x).num(s.z).num(s.r).num(s.until);
   h.num(world.turnStart);
+  if (world.objective) hashValue(h, world.objective);
   for (const d of world.doors) h.num(d.id).str(d.state);
   return h.digest();
 }

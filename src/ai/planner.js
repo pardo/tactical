@@ -28,8 +28,38 @@ function centroid(points) {
   return { x: points.reduce((s, p) => s + p.x, 0) / n, z: points.reduce((s, p) => s + p.z, 0) / n };
 }
 
+/**
+ * Tie-breaks in team-relative coordinates (team B's world is rotated 180°), so
+ * a symmetric map gives both AIs mirror-image decisions instead of one side
+ * always preferring "west".
+ */
+const side = (s) => (s.team === 'A' ? 1 : -1);
+const tieBreak = (s) => (a, b) => side(s) * (a.x - b.x) || side(s) * (a.z - b.z);
+
+/** Nearest walkable, non-door tile centre to p (team-relative tie-break). */
+function nearestWalkable(world, s, p) {
+  const { map } = world;
+  const c = worldToCell(map, p.x, p.z);
+  if (isWalkable(map, c.cx, c.cz)) return p;
+  let best = null;
+  for (let r = 1; r < 6 && !best; r++) {
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const cx = c.cx + dx;
+        const cz = c.cz + dz;
+        if (!isWalkable(map, cx, cz) || tileAt(map, cx, cz) === Tile.DOOR) continue;
+        const q = { ...cellCenter(map, cx, cz) };
+        q.d = dist(q, p);
+        if (!best || q.d < best.d - 1e-9 || (Math.abs(q.d - best.d) <= 1e-9 && tieBreak(s)(q, best) < 0)) best = q;
+      }
+    }
+  }
+  return best ?? p;
+}
+
 /** Point `d` metres along the walkable route from s toward target. */
 function pointAlongPath(world, s, target, d) {
+  target = nearestWalkable(world, s, target);
   const path = findPath(world.map, s.x, s.z, target.x, target.z);
   if (!path) return { x: s.x, z: s.z };
   let prev = { x: s.x, z: s.z };
@@ -97,14 +127,6 @@ function coverAgainst(map, cx, cz, threat) {
 }
 
 /** Best reachable tile within `radius` of `near`, preferring low cover facing the threat. */
-/**
- * Tie-breaks in team-relative coordinates (team B's world is rotated 180°), so
- * a symmetric map gives both AIs mirror-image decisions instead of one side
- * always preferring "west".
- */
-const side = (s) => (s.team === 'A' ? 1 : -1);
-const tieBreak = (s) => (a, b) => side(s) * (a.x - b.x) || side(s) * (a.z - b.z);
-
 function findSpot(world, s, near, threat, radius, taken) {
   const { map } = world;
   const c = worldToCell(map, near.x, near.z);
@@ -226,10 +248,14 @@ export function createAI(team, seed = 1) {
     const home = own.length ? centroid(own) : spawnCentroid;
     let objective;
     let objLabel;
+    const zone = world.objective?.type === 'zone' ? { x: world.objective.x, z: world.objective.z } : null;
     if (known.length) {
       objective = known.reduce((a, b) => (dist(a, home) <= dist(b, home) ? a : b));
       objLabel = `last seen #${objective.id}`;
       searchTarget = null;
+    } else if (zone) {
+      objective = zone;
+      objLabel = 'the zone';
     } else {
       // Nobody in sight: first head for the enemy spawn, then sweep stale sectors.
       if (!searchTarget) searchTarget = turn <= 1 ? spawnCentroid : pickSearchTarget(world, home);
@@ -237,6 +263,11 @@ export function createAI(team, seed = 1) {
       objective = searchTarget ?? spawnCentroid;
       objLabel = `search (${objective.x.toFixed(0)}, ${objective.z.toFixed(0)})`;
     }
+
+    // Where to go vs. what to guard against: in zone mode we always go to the zone
+    // and fight from there; otherwise we go toward the enemy (or search).
+    const threat = objective;
+    const target = zone ?? objective;
 
     const plans = {};
     const notes = {};
@@ -263,30 +294,34 @@ export function createAI(team, seed = 1) {
         let dest;
         let spot;
         if (role === 'overwatch' && known.length) {
-          spot = findOverwatch(world, s, objective, OVERWATCH_RADIUS[s.role] ?? 7, taken);
-          dest = spot ?? pointAlongPath(world, s, objective, 4);
+          spot = findOverwatch(world, s, zone ?? objective, OVERWATCH_RADIUS[s.role] ?? 7, taken);
+          dest = spot ?? pointAlongPath(world, s, target, 4);
         } else if (role === 'overwatch') {
           // Nothing to watch yet: creep forward with the search, a bit behind the assaulters.
-          dest = pointAlongPath(world, s, objective, rng.range(3, 5));
+          dest = pointAlongPath(world, s, target, rng.range(3, 5));
         } else if (role === 'flank') {
-          const dx = objective.x - s.x;
-          const dz = objective.z - s.z;
+          const dx = target.x - s.x;
+          const dz = target.z - s.z;
           const len = Math.sqrt(dx * dx + dz * dz) || 1;
           const side = s.id % 2 ? 1 : -1;
-          dest = { x: s.x + (dx / len) * 6 - (dz / len) * 5 * side, z: s.z + (dz / len) * 6 + (dx / len) * 5 * side };
+          // Flank toward the target; in zone mode, close in on the zone itself once near.
+          const off = zone && len < 8 ? 0 : 5;
+          dest = { x: s.x + (dx / len) * 6 - (dz / len) * off * side, z: s.z + (dz / len) * 6 + (dx / len) * off * side };
         } else {
-          dest = pointAlongPath(world, s, objective, rng.range(5, 8));
+          // Assault: push toward the target; in zone mode, stop inside it.
+          dest = zone && dist(s, zone) < 6 ? zone : pointAlongPath(world, s, target, rng.range(5, 8));
         }
-        spot ??= findSpot(world, s, dest, objective, 2, taken) ?? findSpot(world, s, pointAlongPath(world, s, objective, 5), objective, 2, taken);
+        const radius = zone && dist(dest, zone) < 1 ? world.objective.r - 0.5 : 2;
+        spot ??= findSpot(world, s, dest, threat, radius, taken) ?? findSpot(world, s, pointAlongPath(world, s, target, 5), threat, 2, taken);
 
         if (spot) {
           const wp = makeWaypoint(spot.x, spot.z);
-          const far = !known.length && dist(s, objective) > 18 && role !== 'overwatch';
+          const far = !known.length && dist(s, target) > 18 && role !== 'overwatch';
           wp.move = far ? 'run' : 'walk';
-          if (known.length) wp.look = { x: objective.x, z: objective.z };
+          if (known.length) wp.look = { x: threat.x, z: threat.z };
           if (spot.cover === 'low') wp.actions.push({ type: 'stance', stance: 'crouch' });
           else wp.actions.push({ type: 'stance', stance: 'stand' });
-          wp.actions.push({ type: 'face', x: objective.x, z: objective.z }, { type: 'wait', t: 5 });
+          wp.actions.push({ type: 'face', x: threat.x, z: threat.z }, { type: 'wait', t: 5 });
           wps.push(wp);
           taken.push(spot);
           note = `${role} → ${wp.move} to ${spot.cover ? `${spot.cover} cover` : 'open ground'}, watching ${objLabel}`;

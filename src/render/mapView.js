@@ -19,7 +19,7 @@ function instanced(geometry, material, cells, map, y) {
   return mesh;
 }
 
-export function createMapView(scene, map) {
+export function createMapView(scene, map, objective = null) {
   const group = new THREE.Group();
   const byTile = { [Tile.WALL]: [], [Tile.LOW_COVER]: [], [Tile.DOOR]: [] };
   for (let cz = 0; cz < map.height; cz++) {
@@ -89,6 +89,33 @@ export function createMapView(scene, map) {
       doorPanels.push(panel);
     }
   }
+
+  // Objective zone: translucent disc + ring, tinted by whoever holds it.
+  let zone = null;
+  if (objective?.type === 'zone') {
+    const fill = new THREE.Mesh(
+      new THREE.CircleGeometry(objective.r, 48),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, depthWrite: false }),
+    );
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(objective.r - 0.12, objective.r, 64),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false }),
+    );
+    for (const m of [fill, ring]) {
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(objective.x, 0.02, objective.z);
+      group.add(m);
+    }
+    zone = { fill, ring };
+  }
+  const ZONE_COLORS = { A: 0x4a90e2, B: 0xe2574a, contested: 0xffd34d };
+  group.userData.setZone = (holder) => {
+    if (!zone) return;
+    const c = ZONE_COLORS[holder] ?? 0xffffff;
+    zone.fill.material.color.setHex(c);
+    zone.ring.material.color.setHex(c);
+    zone.fill.material.opacity = holder ? 0.18 : 0.08;
+  };
 
   scene.add(group);
   /** @param states door states from a frame ('closed' | 'open' | 'breached'), in door order */

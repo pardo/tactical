@@ -5,7 +5,8 @@ import { makeWaypoint } from './sim/plan.js';
 import { createMatch, TEAM_NAMES } from './game/match.js';
 import { ROLES, WEAPONS, DEFAULT_SQUAD, cycleRole } from './sim/roles.js';
 import { createRecorder } from './game/recorder.js';
-import killhouse from './maps/killhouse.js';
+import { MAPS, MAP_IDS, DEFAULT_MAP } from './maps/index.js';
+import { MODES, MODE_IDS } from './sim/objective.js';
 import { createScene } from './render/scene.js';
 import { createMapView } from './render/mapView.js';
 import { createSoldierView } from './render/soldierView.js';
@@ -62,15 +63,25 @@ const ui = {
   logOpen: true,
   auto: true,
   squads: { A: [...DEFAULT_SQUAD], B: [...DEFAULT_SQUAD] },
+  mapId: DEFAULT_MAP,
+  gameMode: 'elimination',
 };
 
+const settings = () => ({
+  mapName: MAPS[ui.mapId].name,
+  modeName: MODES[ui.gameMode].label,
+  modeHelp: MODES[ui.gameMode].help,
+});
+const cycle = (list, v) => list[(list.indexOf(v) + 1) % list.length];
+
 function squadOverlay(mode) {
-  const teams = (mode === 'hotseat' ? ['A', 'B'] : ['A']).map((team) => ({
+  const humanTeams = mode === 'hotseat' ? ['A', 'B'] : mode === 'vsAI' ? ['A'] : [];
+  const teams = humanTeams.map((team) => ({
     team,
     name: TEAM_NAMES[team],
     squad: ui.squads[team].map((r) => ({ role: r, label: ROLES[r].label, short: ROLES[r].short })),
   }));
-  return overlays.squad(teams, mode);
+  return overlays.squad(teams, mode, settings());
 }
 
 /** Everything belonging to the current match. */
@@ -95,6 +106,7 @@ function lobbyOverlay() {
     team,
     teamName: TEAM_NAMES[team],
     squad: ui.squads[team].map((r) => ({ label: ROLES[r].label, short: ROLES[r].short })),
+    settings: settings(),
   });
 }
 
@@ -129,7 +141,13 @@ function onNetEvent(e) {
       hud.overlay(overlays.message('Version mismatch', 'Both players need the same game version. Reload and try again.'));
       break;
     case 'start':
-      startMatch('online', { seed: e.seed, squads: e.squads, localTeam: e.localTeam });
+      startMatch('online', {
+        seed: e.seed,
+        squads: e.squads,
+        localTeam: e.localTeam,
+        mapId: MAPS[e.map] ? e.map : ui.mapId,
+        gameMode: MODES[e.mode] ? e.mode : ui.gameMode,
+      });
       break;
     case 'remoteCommitted':
       net.opponentReady = true;
@@ -154,7 +172,9 @@ function startMatch(mode, opts = {}) {
   const seed = opts.seed ?? (Math.random() * 2 ** 31) >>> 0;
   const squads =
     opts.squads ?? (mode === 'aiVsAi' ? {} : mode === 'vsAI' ? { A: ui.squads.A } : { A: ui.squads.A, B: ui.squads.B });
-  const match = createMatch({ mode, mapDef: killhouse, seed, squads, localTeam: opts.localTeam });
+  const mapId = opts.mapId ?? ui.mapId;
+  const gameMode = opts.gameMode ?? ui.gameMode;
+  const match = createMatch({ mode, mapDef: MAPS[mapId], seed, squads, localTeam: opts.localTeam, gameMode });
   const { map } = match;
   const half = Math.max(map.width, map.height) / 2;
   view.setShadowBounds(half + 2);
@@ -166,7 +186,7 @@ function startMatch(mode, opts = {}) {
     seed,
     match,
     recorder: createRecorder(match.world),
-    mapView: createMapView(view.scene, map),
+    mapView: createMapView(view.scene, map, match.world.objective),
     soldiers: createSoldierView(view.scene, match.labels),
     plans: createPlanView(view.scene),
     fx: createFxView(view.scene),
@@ -371,9 +391,14 @@ function onAction(action, arg) {
   const P = g?.planning;
   switch (action) {
     case 'start':
-      if (arg === 'aiVsAi') return startMatch(arg);
       ui.pendingMode = arg;
       return hud.overlay(squadOverlay(arg));
+    case 'cycleMap':
+      ui.mapId = cycle(MAP_IDS, ui.mapId);
+      return hud.overlay(net ? lobbyOverlay() : squadOverlay(ui.pendingMode));
+    case 'cycleMode':
+      ui.gameMode = cycle(MODE_IDS, ui.gameMode);
+      return hud.overlay(net ? lobbyOverlay() : squadOverlay(ui.pendingMode));
     case 'cycleRole': {
       const [team, i] = arg.split(':');
       ui.squads[team] = cycleRole(ui.squads[team], Number(i));
@@ -403,7 +428,7 @@ function onAction(action, arg) {
     case 'onlineReady':
       if (!net) return;
       net.ready = true;
-      net.session.ready(ui.squads[net.isHost ? 'A' : 'B']);
+      net.session.ready(ui.squads[net.isHost ? 'A' : 'B'], { map: ui.mapId, mode: ui.gameMode });
       if (!g) hud.overlay(lobbyOverlay());
       return;
     case 'fullscreen':
@@ -541,7 +566,8 @@ function updateHud() {
   else if (match.phase === 'handoff') status = `Turn ${match.turn} · handoff`;
   else if (match.phase === 'waiting') status = `Turn ${match.turn} · waiting for opponent…`;
   else status = `Turn ${match.turn} · ${(g.match.turnTick / TICK_RATE).toFixed(1)}s / ${(TURN_TICKS / TICK_RATE).toFixed(0)}s`;
-  hud.status(`${status}\nBlue ${alive('A')} · Red ${alive('B')}`);
+  const zone = frame.objective ? ` · zone ${frame.objective.score.A.toFixed(0)}–${frame.objective.score.B.toFixed(0)}/${match.world.objective.needed}s` : '';
+  hud.status(`${status}\nBlue ${alive('A')} · Red ${alive('B')}${zone}`);
   hud.buttons({ ...ui, inMatch: true });
   hud.log(visibleLog(), ui.logOpen);
   hud.timeline({
@@ -727,6 +753,7 @@ startLoop({
       g.fx.drawGrenades(prev, curr, a);
       g.fx.drawSmokes(curr);
       g.mapView.userData.setDoors(curr.doors);
+      g.mapView.userData.setZone(curr.objective?.holder);
       g.fx.update(dt);
       drawPlans();
       updateHud();
