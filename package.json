@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-deterministic-compat": "^0.21.0",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "trystero": "^0.26.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

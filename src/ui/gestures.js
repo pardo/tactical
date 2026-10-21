@@ -6,7 +6,8 @@
  *
  * Emitted handlers (all optional):
  *   onTap({x, y, pointerType})        short press without moving
- *   onLongPress({x, y, pointerType})  press held still for LONG_PRESS_MS
+ *   onLongPress({x, y, pointerType})  press held still for LONG_PRESS_MS; return 'drag' to
+ *                                     turn the rest of the gesture into a drag (press-and-hold to pick up)
  *   onPan(dx, dy)                     1 finger / left or middle mouse drag; 2-finger midpoint drag
  *   onOrbit(dx, dy)                   right mouse drag
  *   onPinch(scale, cx, cy)            2 fingers, scale > 1 = fingers spreading
@@ -66,6 +67,10 @@ export class GestureTracker {
 
     const pr = this.primary;
     if (!pr || pr.id !== id) return;
+    if (pr.dragging && pr.longPressed) {
+      this.h.onDrag?.({ x, y });
+      return;
+    }
     if (!pr.moved && Math.hypot(x - pr.x0, y - pr.y0) > TAP_SLOP_PX) {
       pr.moved = true;
       pr.tapEligible = false;
@@ -112,7 +117,7 @@ export class GestureTracker {
     pr.longPressed = true;
     pr.tapEligible = false;
     const p = this.pointers.get(pr.id);
-    this.h.onLongPress?.({ x: p.x, y: p.y, pointerType: pr.pointerType });
+    if (this.h.onLongPress?.({ x: p.x, y: p.y, pointerType: pr.pointerType }) === 'drag') pr.dragging = true;
   }
 
   #pairState() {

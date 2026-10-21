@@ -110,4 +110,18 @@ describe('GestureTracker', () => {
     expect(h.onPan).toHaveBeenCalled();
     expect(h.onDrag).not.toHaveBeenCalled();
   });
+
+  it('press-and-hold can pick something up and drag it', () => {
+    const { h, g } = setup();
+    h.onLongPress.mockReturnValue('drag');
+    g.down(touch(1, 100, 100, 0));
+    g.checkLongPress(LONG_PRESS_MS);
+    g.move(touch(1, 104, 100)); // even small moves drag once picked up
+    g.move(touch(1, 130, 100));
+    g.up(touch(1, 130, 100));
+    expect(h.onDrag).toHaveBeenLastCalledWith({ x: 130, y: 100 });
+    expect(h.onDragEnd).toHaveBeenCalledOnce();
+    expect(h.onPan).not.toHaveBeenCalled();
+    expect(h.onTap).not.toHaveBeenCalled();
+  });
 });

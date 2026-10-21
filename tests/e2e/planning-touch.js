@@ -53,7 +53,7 @@ async (page) => {
   });
   const cdp = await page.context().newCDPSession(page);
   const touch = (type, x, y) =>
-    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 7 }] });
   await touch('touchStart', at.x, at.y);
   for (let i = 1; i <= 8; i++) await touch('touchMove', at.x + i * 5, at.y);
   await touch('touchEnd');

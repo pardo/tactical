@@ -19,6 +19,9 @@ import { createHud, overlays, actionLabel } from './ui/hud.js';
 import { createLabels } from './ui/labels.js';
 import { createPlanning } from './ui/planning.js';
 import { startLoop } from './loop.js';
+import { hashWorld } from './sim/world.js';
+import { createSession } from './net/session.js';
+import { createTrysteroTransport, randomRoomCode } from './net/trystero.js';
 
 await initPhysics();
 
@@ -34,7 +37,15 @@ const PICK_HINTS = {
 const LOG_LINES = 10;
 
 const app = document.getElementById('app');
-const view = createScene(app);
+let view;
+try {
+  view = createScene(app);
+} catch (err) {
+  document.getElementById('ui').innerHTML =
+    `<div id="overlay"><div class="card"><h2>3D graphics unavailable</h2><p>${String(err.message)}</p>` +
+    '<p class="small">This game needs WebGL 2. Try another browser, or enable hardware acceleration.</p></div></div>';
+  throw err;
+}
 const marker = createTapMarker(view.scene);
 const keyboard = createKeyboard();
 const labels = createLabels(document.getElementById('ui'));
@@ -65,11 +76,85 @@ function squadOverlay(mode) {
 /** Everything belonging to the current match. */
 let g = null;
 
-function startMatch(mode) {
+/** Online session state while in a room. */
+let net = null;
+
+function leaveRoom() {
+  net?.session.leave();
+  net = null;
+  if (location.search.includes('room=')) history.replaceState(null, '', location.pathname);
+}
+
+function lobbyOverlay() {
+  const team = net.isHost ? 'A' : 'B';
+  return overlays.lobby({
+    code: net.code,
+    isHost: net.isHost,
+    connected: net.connected,
+    ready: net.ready,
+    team,
+    teamName: TEAM_NAMES[team],
+    squad: ui.squads[team].map((r) => ({ label: ROLES[r].label, short: ROLES[r].short })),
+  });
+}
+
+function enterRoom(code, isHost) {
+  leaveRoom();
+  let transport;
+  try {
+    transport = createTrysteroTransport(code);
+  } catch (err) {
+    return hud.overlay(overlays.online(`Could not open room: ${err.message}`));
+  }
+  net = { code, isHost, connected: false, ready: false, sentState: new Set(), opponentReady: false, session: null };
+  net.session = createSession({ transport, isHost, onEvent: onNetEvent });
+  hud.overlay(lobbyOverlay());
+}
+
+function onNetEvent(e) {
+  if (!net) return;
+  switch (e.type) {
+    case 'peerJoined':
+      net.connected = true;
+      if (!g) hud.overlay(lobbyOverlay());
+      break;
+    case 'peerLeft':
+      net.connected = false;
+      if (g) {
+        ui.paused = true;
+        g.netMessage = overlays.message('Opponent disconnected', 'The other player left the room.');
+      } else hud.overlay(lobbyOverlay());
+      break;
+    case 'versionMismatch':
+      hud.overlay(overlays.message('Version mismatch', 'Both players need the same game version. Reload and try again.'));
+      break;
+    case 'start':
+      startMatch('online', { seed: e.seed, squads: e.squads, localTeam: e.localTeam });
+      break;
+    case 'remoteCommitted':
+      net.opponentReady = true;
+      break;
+    case 'plans':
+      g?.match.setRemotePlans(e.team, e.plans);
+      net.opponentReady = false;
+      if (g?.match.phase === 'simulating') onPhase();
+      break;
+    case 'desync':
+      g?.log.push({ i: g.cursor, team: null, cls: 'kill', text: `⚠ DESYNC on turn ${e.turn} (${e.local} vs ${e.remote})` });
+      if (g) g.netMessage = overlays.message('Desync', `The two games diverged on turn ${e.turn}. Please report this.`);
+      break;
+    case 'cheat':
+      if (g) g.netMessage = overlays.message('Invalid plan', "The opponent's plan did not match what they committed to.");
+      break;
+  }
+}
+
+function startMatch(mode, opts = {}) {
   endMatch();
-  const seed = (Math.random() * 2 ** 31) >>> 0;
-  const squads = mode === 'aiVsAi' ? {} : mode === 'vsAI' ? { A: ui.squads.A } : { A: ui.squads.A, B: ui.squads.B };
-  const match = createMatch({ mode, mapDef: killhouse, seed, squads });
+  const seed = opts.seed ?? (Math.random() * 2 ** 31) >>> 0;
+  const squads =
+    opts.squads ?? (mode === 'aiVsAi' ? {} : mode === 'vsAI' ? { A: ui.squads.A } : { A: ui.squads.A, B: ui.squads.B });
+  const match = createMatch({ mode, mapDef: killhouse, seed, squads, localTeam: opts.localTeam });
   const { map } = match;
   const half = Math.max(map.width, map.height) / 2;
   view.setShadowBounds(half + 2);
@@ -92,6 +177,7 @@ function startMatch(mode) {
     log: [],
     overShown: false,
     watchSelected: null,
+    netMessage: null,
   };
   ui.paused = false;
   ui.speed = 1;
@@ -241,7 +327,18 @@ attachGestures(app, {
   onTwist: (da) => rig?.rotate(da),
   onWheel: (deltaY, x, y) => rig?.zoom(Math.exp(-deltaY * 0.0015), x, y),
   onTap: ({ x, y }) => handleTap(x, y, false),
-  onLongPress: ({ x, y }) => handleTap(x, y, true),
+  onLongPress: ({ x, y }) => {
+    // Holding a waypoint picks it up (then drag it); holding open ground adds a running waypoint.
+    if (editing()) {
+      const h = g.plans.pickWaypoint(view.camera, x, y, viewW, viewH);
+      if (h) {
+        g.planning.beginDrag(h.soldierId, h.index);
+        navigator.vibrate?.(10);
+        return 'drag';
+      }
+    }
+    handleTap(x, y, true);
+  },
   onDragStart: ({ x, y }) => {
     if (!editing()) return false;
     const h = g.plans.pickWaypoint(view.camera, x, y, viewW, viewH);
@@ -280,13 +377,35 @@ function onAction(action, arg) {
     case 'cycleRole': {
       const [team, i] = arg.split(':');
       ui.squads[team] = cycleRole(ui.squads[team], Number(i));
-      return hud.overlay(squadOverlay(ui.pendingMode));
+      return hud.overlay(net ? lobbyOverlay() : squadOverlay(ui.pendingMode));
     }
     case 'startMatch':
       return startMatch(arg);
     case 'menu':
       endMatch();
+      leaveRoom();
       return hud.overlay(overlays.menu());
+    case 'onlineMenu':
+      return hud.overlay(overlays.online());
+    case 'onlineCreate':
+      return enterRoom(randomRoomCode(), true);
+    case 'onlineJoin': {
+      const code = document.getElementById('room-code')?.value.trim().toUpperCase();
+      if (!code || code.length < 4) return hud.overlay(overlays.online('Enter the room code from your opponent.'));
+      return enterRoom(code, false);
+    }
+    case 'shareRoom': {
+      const url = `${location.origin}${location.pathname}?room=${net.code}`;
+      if (navigator.share) navigator.share({ title: 'Tactical', text: `Join my Tactical match (room ${net.code})`, url }).catch(() => {});
+      else navigator.clipboard?.writeText(url);
+      return;
+    }
+    case 'onlineReady':
+      if (!net) return;
+      net.ready = true;
+      net.session.ready(ui.squads[net.isHost ? 'A' : 'B']);
+      if (!g) hud.overlay(lobbyOverlay());
+      return;
     case 'fullscreen':
       if (document.fullscreenElement) document.exitFullscreen();
       else document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
@@ -349,6 +468,11 @@ function onAction(action, arg) {
       break;
     case 'go':
       if (!editing()) break;
+      if (g.mode === 'online') {
+        // Simulate with exactly what the opponent will receive (JSON round-trip).
+        const team = g.match.localTeam;
+        g.match.drafts[team] = net.session.commit(g.match.turn, g.match.drafts[team]);
+      }
       g.match.confirm();
       onPhase();
       break;
@@ -415,6 +539,7 @@ function updateHud() {
   } else if (!live) status = `Replay · turn ${turn} · ${sec.toFixed(1)}s`;
   else if (match.phase === 'planning') status = `Turn ${match.turn} · ${TEAM_NAMES[match.planningTeam]} planning`;
   else if (match.phase === 'handoff') status = `Turn ${match.turn} · handoff`;
+  else if (match.phase === 'waiting') status = `Turn ${match.turn} · waiting for opponent…`;
   else status = `Turn ${match.turn} · ${(g.match.turnTick / TICK_RATE).toFixed(1)}s / ${(TURN_TICKS / TICK_RATE).toFixed(0)}s`;
   hud.status(`${status}\nBlue ${alive('A')} · Red ${alive('B')}`);
   hud.buttons({ ...ui, inMatch: true });
@@ -427,7 +552,9 @@ function updateHud() {
     live,
   });
 
-  if (match.phase === 'handoff') {
+  if (g.netMessage) {
+    hud.overlay(g.netMessage);
+  } else if (match.phase === 'handoff') {
     hud.overlay(overlays.handoff(TEAM_NAMES[match.planningTeam]));
   } else if (match.phase === 'over' && live && !g.overShown) {
     hud.overlay(overlays.over(status));
@@ -480,6 +607,8 @@ function updateHud() {
 
     const hint = P.state.pickMode
       ? PICK_HINTS[P.state.pickMode]
+      : net?.opponentReady
+        ? 'Opponent is ready'
       : s && !(P.state.drafts[s.id]?.length)
         ? 'Tap the map to add a waypoint · hold for a running one'
         : '';
@@ -570,6 +699,11 @@ startLoop({
         }
       }
     }
+    // Online: report the end-of-turn state so both sides can detect a desync.
+    if (net && g.mode === 'online' && (g.match.phase === 'turnEnd' || g.match.phase === 'over') && !net.sentState.has(g.match.turn)) {
+      net.sentState.add(g.match.turn);
+      net.session.sendState(g.match.turn, hashWorld(g.match.world));
+    }
     if (g.match.phase === 'turnEnd' && atLive()) {
       if (g.mode !== 'aiVsAi') nextTurn();
       else if (ui.auto && !ui.paused && (g.turnEndWait += DT) > 0.8) nextTurn();
@@ -603,7 +737,9 @@ startLoop({
 });
 
 hud.buttons({ inMatch: false });
-hud.overlay(overlays.menu());
+const roomParam = new URLSearchParams(location.search).get('room');
+if (roomParam) enterRoom(roomParam.toUpperCase(), false);
+else hud.overlay(overlays.menu());
 
 // Dev-only handle for headless browser tests.
 if (import.meta.env.DEV) window.__tactical = { view, get game() { return g; }, get rig() { return rig; }, ui };

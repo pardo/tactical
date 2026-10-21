@@ -225,6 +225,7 @@ export const overlays = {
       ${btn('start', '⚔ Play vs AI', { arg: 'vsAI', cls: 'go' })}
       ${btn('start', '👁 Watch AI vs AI', { arg: 'aiVsAi' })}
       ${btn('start', '👥 Hotseat (2 players, 1 device)', { arg: 'hotseat' })}
+      ${btn('onlineMenu', '🌐 Online (2 players)')}
       <p class="small">Tap a soldier, tap the map to add waypoints, hold to add a running one.
       Tap a waypoint to edit it, drag it to move it. Pinch / twist / drag to move the camera.</p>
     </div>`,
@@ -243,6 +244,41 @@ export const overlays = {
       <div class="roles small">${ROLE_HELP}</div>
       ${btn('startMatch', 'Deploy ▶', { arg: mode, cls: 'go' })}
       ${btn('menu', 'Back')}
+    </div>`,
+  online: (error = '') => `
+    <div class="card">
+      <h2>Online match</h2>
+      ${error ? `<p class="error">${esc(error)}</p>` : ''}
+      ${btn('onlineCreate', '➕ Create room', { cls: 'go' })}
+      <div class="join-row">
+        <input id="room-code" maxlength="8" placeholder="ROOM CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        ${btn('onlineJoin', 'Join')}
+      </div>
+      ${btn('menu', 'Back')}
+      <p class="small">Peer-to-peer: both players need internet. The room code is all you share.</p>
+    </div>`,
+  /** @param squad [{label, short}] | null to hide the picker */
+  lobby: ({ code, isHost, connected, ready, squad, team, teamName }) => `
+    <div class="card">
+      <h2>Room ${esc(code)}</h2>
+      <p>You are <b class="t-${team}">${esc(teamName)}</b>${isHost ? ' (host)' : ''}</p>
+      ${isHost ? `${btn('shareRoom', '🔗 Share invite link')}` : ''}
+      <p>${connected ? '✅ Opponent connected' : '⏳ Waiting for opponent…'}</p>
+      ${
+        ready
+          ? `<p>Deployed. ${connected ? 'Waiting for opponent to deploy…' : ''}</p>`
+          : `<div class="squad team-${team}"><b>Your squad</b><div class="slots">${squad
+              .map((r, i) => btn('cycleRole', `<span>${esc(r.short)}</span><small>${esc(r.label)}</small>`, { arg: `${team}:${i}`, cls: 'slot' }))
+              .join('')}</div></div>
+             ${btn('onlineReady', 'Deploy ▶', { cls: 'go' })}`
+      }
+      ${btn('menu', 'Leave')}
+    </div>`,
+  message: (title, text, actions = btn('menu', 'Main menu')) => `
+    <div class="card">
+      <h2>${esc(title)}</h2>
+      <p>${esc(text)}</p>
+      ${actions}
     </div>`,
   handoff: (teamName) => `
     <div class="card">

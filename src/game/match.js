@@ -12,7 +12,8 @@ export const TEAM_NAMES = { A: 'Blue', B: 'Red' };
 /**
  * Turn flow around the deterministic sim:
  *   planning(team) → [handoff → planning(other team)] → simulating → turnEnd → planning …
- * Modes: 'vsAI' (human A vs AI B), 'aiVsAi' (spectate), 'hotseat' (two humans, one device).
+ * Modes: 'vsAI' (human A vs AI B), 'aiVsAi' (spectate), 'hotseat' (two humans, one device),
+ * 'online' (local human vs remote human; the remote plan arrives via setRemotePlans).
  */
 /** A random legal squad, for AI teams in spectator mode (variety between matches). */
 export function randomSquad(seed) {
@@ -20,14 +21,20 @@ export function randomSquad(seed) {
   return sanitizeSquad(Array.from({ length: 12 }, () => ROLE_IDS[rng.int(0, ROLE_IDS.length)]));
 }
 
-export function createMatch({ mode, mapDef, seed, squads = {} }) {
+export function createMatch({ mode, mapDef, seed, squads = {}, localTeam = 'A' }) {
   const map = parseMap(mapDef);
   const world = createWorld(seed, map);
   const aiSquad = (t) => (mode === 'aiVsAi' ? randomSquad(seed + (t === 'A' ? 1 : 2)) : DEFAULT_SQUAD);
   spawnSquads(world, { A: squads.A ?? aiSquad('A'), B: squads.B ?? aiSquad('B') });
 
   const controllers =
-    mode === 'aiVsAi' ? { A: 'ai', B: 'ai' } : mode === 'vsAI' ? { A: 'human', B: 'ai' } : { A: 'human', B: 'human' };
+    mode === 'aiVsAi'
+      ? { A: 'ai', B: 'ai' }
+      : mode === 'vsAI'
+        ? { A: 'human', B: 'ai' }
+        : mode === 'online'
+          ? { [localTeam]: 'human', [localTeam === 'A' ? 'B' : 'A']: 'remote' }
+          : { A: 'human', B: 'human' };
   const ais = {};
   for (const t of TEAMS) if (controllers[t] === 'ai') ais[t] = createAI(t, seed + (t === 'A' ? 11 : 23));
 
@@ -49,16 +56,20 @@ export function createMatch({ mode, mapDef, seed, squads = {} }) {
     drafts: { A: {}, B: {} },
     aiNotes: { A: {}, B: {} },
     turnTick: 0,
+    localTeam,
+    remoteReady: false,
 
     /** Which team's fog of war applies; null = see everything. */
     get viewerTeam() {
       if (mode === 'aiVsAi') return null;
       if (mode === 'vsAI') return 'A';
+      if (mode === 'online') return localTeam;
       return m.phase === 'planning' || m.phase === 'handoff' ? m.planningTeam : null;
     },
 
     beginTurn() {
       m.turn++;
+      m.remoteReady = false;
       for (const t of TEAMS) {
         m.drafts[t] = {};
         for (const s of world.soldiers) if (s.team === t && s.alive) m.drafts[t][s.id] = cloneWaypoints(s.orders);
@@ -83,9 +94,19 @@ export function createMatch({ mode, mapDef, seed, squads = {} }) {
       if (next) {
         m.phase = 'handoff';
         m.planningTeam = next;
+      } else if (TEAMS.some((t) => controllers[t] === 'remote') && !m.remoteReady) {
+        m.phase = 'waiting';
+        m.planningTeam = null;
       } else {
         m.startSim();
       }
+    },
+
+    /** The remote player's plans for this turn arrived (online mode). */
+    setRemotePlans(team, plans) {
+      m.drafts[team] = plans;
+      m.remoteReady = true;
+      if (m.phase === 'waiting') m.startSim();
     },
 
     acceptHandoff() {
