@@ -127,6 +127,10 @@ function lobbyOverlay() {
 
 function enterRoom(code, isHost) {
   leaveRoom();
+  // Trystero needs WebCrypto, which browsers only enable on https or localhost (not http://192.168.x.x).
+  if (!window.isSecureContext) {
+    return hud.overlay(overlays.online('Online play needs a secure (https) link. Open the game through its https address instead.'));
+  }
   // Online games default to a planning clock so nobody can stall.
   if (!ui.planTimer) ui.planTimer = 90;
   let transport;

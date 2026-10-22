@@ -13,7 +13,8 @@
     "format": "prettier --write .",
     "e2e": "sh tests/e2e/run.sh",
     "check": "eslint . && vitest run && vite build",
-    "tunnel": "set -a && . ./.env && ngrok http 5173 --log stdout"
+    "tunnel": "set -a && . ./.env && ngrok http 4173 --log stdout",
+    "serve": "vite build && vite preview"
   },
   "dependencies": {
     "@dimforge/rapier3d-deterministic-compat": "^0.21.0",
