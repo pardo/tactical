@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 
 export function createScene(container) {
+  // Browser tests set this to skip the WebGL draw: scene, camera and HUD still update, but
+  // software GL (llvmpipe) no longer eats the CPU and slows the fixed-step loop down.
+  const noDraw = import.meta.env.DEV && (window.__noDraw || new URLSearchParams(location.search).has('nodraw'));
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
     stencil: true, // vision cones and fog of war use the stencil buffer
@@ -93,6 +96,6 @@ export function createScene(container) {
       resize();
     },
     setShadowBounds,
-    render: () => renderer.render(scene, camera),
+    render: () => noDraw || renderer.render(scene, camera),
   };
 }

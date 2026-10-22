@@ -17,7 +17,7 @@ async (page) => {
     P.selectWaypoint(s.id, 0);
     return s.id;
   });
-  await page.locator('#bottom .row.info', { hasText: 'next turn' }).waitFor({ timeout: 2000 }).catch(() => {});
+  await page.locator('#bottom .row.info', { hasText: 'next turn' }).waitFor({ timeout: 10000 }).catch(() => {});
   const info = await page.locator('#bottom .row.info').innerText();
   if (!/💣 goes off 6\.7s\s+⏭ next turn/.test(info)) fail(`no late-grenade warning: "${info}"`);
 
@@ -31,7 +31,7 @@ async (page) => {
   }, id);
   if (st.phase !== 'planning') fail(`expected planning, got ${JSON.stringify(st)}`);
   if (st.grenades !== 1) fail(`frag should still be live at turn end: ${JSON.stringify(st)}`);
-  await page.locator('.label.danger').first().waitFor({ timeout: 2000 }).catch(() => {});
+  await page.locator('.label.danger').first().waitFor({ timeout: 10000 }).catch(() => {});
   const label = await page.locator('.label.danger').first().innerText().catch(() => '');
   if (!/^💣 1\.\ds$/.test(label)) fail(`no fuse countdown on the live frag: "${label}"`);
   return `ok: late frag flagged, countdown "${label}" shown while planning`;

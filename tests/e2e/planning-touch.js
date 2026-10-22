@@ -53,14 +53,14 @@ async (page) => {
   s = await st();
   if (s.wps.length !== 1) fail(`expected 1 waypoint after tap, got ${s.wps.length}`);
   // The waypoint's number and arrival time are shown on the map.
-  await page.locator('.label', { hasText: /^1 · \d+\.\ds/ }).first().waitFor({ timeout: 2000 }).catch(() => {});
+  await page.locator('.label', { hasText: /^1 · \d+\.\ds/ }).first().waitFor({ timeout: 10000 }).catch(() => {});
   const wpLabel = await page.locator('.labels .label').first().innerText().catch(() => '');
   if (!/^1 · \d+\.\ds/.test(wpLabel)) fail(`no waypoint ETA label: "${wpLabel}"`);
 
   await page.getByRole('button', { name: '🚶 Walk ▸' }).tap(); // cycles to Run
   // Phones have no tooltips: tapping a control explains it in the panel.
   // (The panel re-renders on the next animation frame, so wait for it.)
-  await page.locator('#bottom .row.explain', { hasText: 'Run:' }).waitFor({ timeout: 2000 }).catch(() => {});
+  await page.locator('#bottom .row.explain', { hasText: 'Run:' }).waitFor({ timeout: 10000 }).catch(() => {});
   const explain = await page.locator('#bottom .row.explain').innerText();
   if (!/^🏃 Run: .*loud/.test(explain)) fail(`no explanation after tapping Run: "${explain}"`);
   await page.getByRole('button', { name: '▼ Crouch' }).tap();
@@ -76,7 +76,7 @@ async (page) => {
   // Selecting the waypoint again shows its plain-language summary.
   await page.evaluate(() => window.__tactical.game.planning.deselectWaypoint());
   await page.evaluate(() => window.__tactical.game.planning.selectWaypoint(window.__tactical.game.planning.state.selectedId, 0));
-  await page.locator('#bottom .row.explain', { hasText: '📋' }).waitFor({ timeout: 2000 }).catch(() => {});
+  await page.locator('#bottom .row.explain', { hasText: '📋' }).waitFor({ timeout: 10000 }).catch(() => {});
   const summary = await page.locator('#bottom .row.explain').innerText();
   if (summary !== '📋 Run here, firing at will, then crouch → wait 1s → throw a flashbang.') fail(`summary: "${summary}"`);
   const panel = await page.locator('#bottom .panel').boundingBox();
@@ -110,9 +110,9 @@ async (page) => {
 
   // Go code (after the drag: its release row makes the bottom area taller): the waypoint waits for Alpha; the release button appears above the squad and toggles.
   await page.getByRole('button', { name: '⏸ Go code' }).tap();
-  await page.getByRole('button', { name: '⏸ Alpha waits' }).waitFor({ timeout: 2000 });
+  await page.getByRole('button', { name: '⏸ Alpha waits' }).waitFor({ timeout: 10000 });
   await page.getByRole('button', { name: '⏸ Alpha waits' }).tap();
-  await page.getByRole('button', { name: '▶ Alpha goes' }).waitFor({ timeout: 2000 });
+  await page.getByRole('button', { name: '▶ Alpha goes' }).waitFor({ timeout: 10000 });
   const go = await page.evaluate(() => window.__tactical.game.planning.state.drafts.go);
   if (JSON.stringify(go) !== '["A"]') fail(`go codes ${JSON.stringify(go)}`);
   const bar = await page.locator('#bottom .bar').boundingBox();
