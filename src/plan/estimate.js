@@ -47,6 +47,7 @@ function doorsCrossed(map, a, b, closedDoors, counted) {
  *   legs: { points: {x,z}[], move: string, blocked: boolean }[],
  *   marks: { arrive: number, done: number, held?: string, booms: { kind, at }[] }[],
  *     // held: go code this waypoint waits behind · booms: when its grenades go off (turn seconds)
+ *   track: { t, x, z }[],      // timed positions (see positionAt)
  *   atTurnEnd: {x,z} | null,   // null if the plan finishes before the turn ends
  *   end: {x,z}, total: number }}
  */
@@ -59,6 +60,7 @@ export function estimatePlan(map, start, waypoints, closedDoors = null, released
   let held = null;
   const legs = [];
   const marks = [];
+  const track = [{ t: 0, x: pos.x, z: pos.z }];
 
   const span = (from, to, dt) => {
     if (!atTurnEnd && t + dt >= TURN_SECONDS) {
@@ -66,6 +68,7 @@ export function estimatePlan(map, start, waypoints, closedDoors = null, released
       atTurnEnd = { x: from.x + (to.x - from.x) * f, z: from.z + (to.z - from.z) * f };
     }
     t += dt;
+    track.push({ t, x: to.x, z: to.z });
   };
 
   for (const wp of waypoints) {
@@ -96,5 +99,20 @@ export function estimatePlan(map, start, waypoints, closedDoors = null, released
     }
     marks.push({ arrive, done: t, booms, ...(heldBefore && { held: heldBefore }) });
   }
-  return { legs, marks, atTurnEnd, end: pos, total: t };
+  return { legs, marks, track, atTurnEnd, end: pos, total: t };
+}
+
+/** Where the plan puts the soldier at turn time t (linear between track points). */
+export function positionAt(est, t) {
+  const { track } = est;
+  for (let i = 1; i < track.length; i++) {
+    const a = track[i - 1];
+    const b = track[i];
+    if (t <= b.t) {
+      const f = b.t > a.t && Number.isFinite(b.t) ? (t - a.t) / (b.t - a.t) : 0;
+      return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f };
+    }
+  }
+  const last = track[track.length - 1];
+  return { x: last.x, z: last.z };
 }

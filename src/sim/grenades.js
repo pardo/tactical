@@ -18,25 +18,28 @@ export const BLAST_RADIUS = GRENADE.frag.radius;
 const GRAVITY = 9.81;
 const RELEASE_HEIGHT = 1.7;
 
-export function throwGrenade(world, s, tx, tz, kind = 'frag') {
-  s.gear[kind]--;
-  let dx = tx - s.x;
-  let dz = tz - s.z;
+/**
+ * The grenade's rigid body, released from a soldier at (x, z) toward (tx, tz).
+ * Shared by the sim and the planning preview (plan/grenadePath.js) so both fly identically.
+ */
+export function launchGrenadeBody(physics, x, z, tx, tz) {
+  let dx = tx - x;
+  let dz = tz - z;
   const dist = length(dx, dz);
   if (dist > GRENADE_RANGE) {
     dx *= GRENADE_RANGE / dist;
     dz *= GRENADE_RANGE / dist;
   }
   const h = headingTo(dx, dz);
-  const ox = s.x + sin(h) * 0.3;
-  const oz = s.z + cos(h) * 0.3;
+  const ox = x + sin(h) * 0.3;
+  const oz = z + cos(h) * 0.3;
   // Ballistic arc that lands on the target after time T (ignores bounces).
   const T = 0.6 + Math.min(dist, GRENADE_RANGE) * 0.05;
-  const vx = (s.x + dx - ox) / T;
-  const vz = (s.z + dz - oz) / T;
+  const vx = (x + dx - ox) / T;
+  const vz = (z + dz - oz) / T;
   const vy = (-RELEASE_HEIGHT + 0.5 * GRAVITY * T * T) / T;
 
-  const body = world.physics.createRigidBody(
+  const body = physics.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(ox, RELEASE_HEIGHT, oz)
       .setLinvel(vx, vy, vz)
@@ -44,7 +47,13 @@ export function throwGrenade(world, s, tx, tz, kind = 'frag') {
       .setAngularDamping(2)
       .setCcdEnabled(true),
   );
-  world.physics.createCollider(RAPIER.ColliderDesc.ball(0.06).setRestitution(0.35).setFriction(0.8).setDensity(4), body);
+  physics.createCollider(RAPIER.ColliderDesc.ball(0.06).setRestitution(0.35).setFriction(0.8).setDensity(4), body);
+  return body;
+}
+
+export function throwGrenade(world, s, tx, tz, kind = 'frag') {
+  s.gear[kind]--;
+  const body = launchGrenadeBody(world.physics, s.x, s.z, tx, tz);
   const g = { id: world.nextId++, kind, team: s.team, ownerId: s.id, fuse: GRENADE[kind].fuse, body };
   world.grenades.push(g);
   world.events.push({ type: 'throw', id: s.id, grenadeId: g.id, kind });

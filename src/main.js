@@ -1,4 +1,5 @@
 import { helpFor, describeWaypoint } from './ui/help.js';
+import { createGrenadePredictor } from './plan/grenadePath.js';
 import './style.css';
 import { initPhysics } from './sim/physics.js';
 import { TICK_RATE, TURN_TICKS, TURN_SECONDS, DT } from './sim/constants.js';
@@ -338,6 +339,7 @@ function endMatch() {
   g.soldiers.dispose();
   g.plans.hide();
   g.fx.clear();
+  g.predictor?.dispose();
   g = null;
 }
 
@@ -861,6 +863,19 @@ function onAction(action, arg) {
       explain(action, arg);
       P.setFire(arg);
       break;
+    case 'cycleMove': {
+      const next = P.selectedWaypoint?.move === 'run' ? 'walk' : 'run';
+      explain('move', next);
+      P.setMove(next);
+      break;
+    }
+    case 'cycleFire': {
+      const order = ['onSight', 'return', 'hold'];
+      const next = order[(order.indexOf(P.selectedWaypoint?.fire) + 1) % order.length];
+      explain('fire', next);
+      P.setFire(next);
+      break;
+    }
     case 'addStance':
       explain(action, arg);
       P.addAction({ type: 'stance', stance: arg });
@@ -1003,8 +1018,11 @@ function updateHud() {
   else if (match.phase === 'waiting') status = `Turn ${match.turn} · waiting for opponent…`;
   else status = `Turn ${match.turn} · ${(g.match.turnTick / TICK_RATE).toFixed(1)}s / ${(TURN_TICKS / TICK_RATE).toFixed(0)}s`;
   const zone = frame.objective ? ` · zone ${frame.objective.score.A.toFixed(0)}–${frame.objective.score.B.toFixed(0)}/${match.world.objective.needed}s` : '';
-  hud.status(`${status}\nBlue ${alive('A')} · Red ${alive('B')}${zone}`);
-  hud.buttons({ ...ui, muted: audio.muted, inMatch: true, emotes: g.mode === 'online' ? EMOTES : null });
+  // One short line on phones: soldiers left per side as 🔵4 🔴3.
+  hud.status(`${status} · 🔵${alive('A')} 🔴${alive('B')}${zone}`);
+  // Pause / speed only matter while something is playing back.
+  const watching = g.match.phase === 'simulating' || g.match.phase === 'over' || !atLive() || g.mode === 'aiVsAi' || g.mode === 'replay';
+  hud.buttons({ ...ui, muted: audio.muted, inMatch: true, emotes: g.mode === 'online' ? EMOTES : null, watching });
   hud.log(visibleLog(), ui.logOpen);
   hud.timeline({
     visible: frames().length > 1,
@@ -1055,7 +1073,16 @@ function updateHud() {
         label: match.labels[s.id],
         index: P.state.wpIndex,
         count: P.state.drafts[s.id].length,
-        booms: (mark?.booms ?? []).map((b) => ({ icon: GRENADE_ICON[b.kind], at: b.at, late: b.at > TURN_SECONDS })),
+        booms: (mark?.booms ?? []).map((b, k) => {
+          const gr = est?.grenades?.filter((x) => x.wpIndex === P.state.wpIndex)[k];
+          return {
+            icon: GRENADE_ICON[b.kind],
+            at: b.at,
+            late: b.at > TURN_SECONDS,
+            bounces: gr?.bounces.length ?? 0,
+            hits: (gr?.danger ?? []).map((id) => match.labels[id]),
+          };
+        }),
         eta: mark ? (mark.held ? `after go code ${GO_CODE_NAMES[mark.held]}` : Number.isFinite(mark.arrive) ? `${mark.arrive.toFixed(1)}s` : 'unreachable') : '–',
         gear: s.gear,
         charges: s.charges,
@@ -1097,6 +1124,17 @@ function updateHud() {
     const toast = g.toast && performance.now() < g.toast.until ? g.toast.text : '';
     hud.hint(match.phase === 'planning' && !live ? 'Watching replay · tap LIVE to keep planning' : toast);
   }
+}
+
+/** Grenade flight predictor for the map as it is now (doors, destroyed cover); rebuilt when that changes. */
+function grenadePredictor() {
+  const w = g.match.world;
+  const key = `${w.doors.map((d) => d.state[0]).join('')}:${w.destroyed.length}`;
+  if (g.predictor?.key !== key) {
+    g.predictor?.dispose();
+    g.predictor = { ...createGrenadePredictor(w), key, id: (g.predictor?.id ?? 0) + 1 };
+  }
+  return g.predictor;
 }
 
 function drawPlans() {
@@ -1142,7 +1180,7 @@ function drawPlans() {
   match.world.doors.forEach((d, i) => {
     if ((doorFrame.doors?.[i] ?? 'closed') === 'closed') closedDoors.add(`${d.cx},${d.cz}`);
   });
-  const estimates = g.plans.setPlans(match.map, plans, selected, closedDoors);
+  const estimates = g.plans.setPlans(match.map, plans, selected, closedDoors, grenadePredictor());
   g.plans.update(rig.state.distance);
 
   // ETA labels for the selected soldier while planning.
@@ -1164,6 +1202,12 @@ function drawPlans() {
     const cls = `${i === P.state.wpIndex ? 'sel' : ''} ${mark && !mark.held && mark.arrive > TURN_TICKS / TICK_RATE ? 'late' : ''}`;
     labels.add(`${i + 1} · ${eta}${icons ? ` ${icons}` : ''}`, { x: w.x, y: 0.2, z: w.z }, view.camera, viewW, viewH, cls);
   });
+  // Where each of the selected soldier's grenades goes off, flagging bounces and friendly fire.
+  for (const gr of est?.grenades ?? []) {
+    const warn = gr.danger.length ? ` ⚠ hits ${gr.danger.map((id) => match.labels[id].split(' ')[1]).join(', ')}` : '';
+    const text = `${GRENADE_ICON[gr.kind]}${gr.bounces.length ? ' ↩ bounces' : ''}${warn}`;
+    labels.add(text, { ...gr.burst, y: 0.3 }, view.camera, viewW, viewH, warn ? 'danger' : gr.bounces.length ? 'bounce' : '');
+  }
   if (est?.atTurnEnd) labels.add('5s', { ...est.atTurnEnd, y: 0.2 }, view.camera, viewW, viewH);
 }
 

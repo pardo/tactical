@@ -77,6 +77,7 @@ export function createSoldierView(scene, labels) {
     cone.rotation.x = Math.PI / 2;
     cone.position.y = 0.03;
 
+    // Number only: the role reads from the model's silhouette (and the squad chips), not more text.
     const tag = textSprite(labels[s.id]?.split(' ')[1] ?? '?', color);
     tag.position.y = 2.1;
     const hpBack = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x000000, depthTest: false }));

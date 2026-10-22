@@ -44,7 +44,7 @@ async (page) => {
   const wpLabel = await page.locator('.labels .label').first().innerText().catch(() => '');
   if (!/^1 · \d+\.\ds/.test(wpLabel)) fail(`no waypoint ETA label: "${wpLabel}"`);
 
-  await page.getByRole('button', { name: '🏃 Run' }).tap();
+  await page.getByRole('button', { name: '🚶 Walk ▸' }).tap(); // cycles to Run
   // Phones have no tooltips: tapping a control explains it in the panel.
   // (The panel re-renders on the next animation frame, so wait for it.)
   await page.locator('#bottom .row.explain', { hasText: 'Run:' }).waitFor({ timeout: 2000 }).catch(() => {});

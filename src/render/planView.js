@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { estimatePlan } from '../plan/estimate.js';
-import { GRENADE, GRENADE_RANGE } from '../sim/grenades.js';
+import { estimatePlan, positionAt } from '../plan/estimate.js';
 import { TEAM_COLORS } from './soldierView.js';
 
 const RUN_COLOR = 0xffa64d;
@@ -8,6 +7,8 @@ const BLOCKED_COLOR = 0xff4d4d;
 const LOOK_COLOR = 0xc28bff;
 const SELECTED_COLOR = 0xffd34d;
 const GRENADE_COLOR = { frag: 0xff6a4d, flash: 0xe8f4ff, smoke: 0xb8bcc2 };
+const DANGER_COLOR = 0xff2d2d;
+const BOUNCE_COLOR = 0xffb02e;
 const Y = 0.06;
 
 const v = (p, y = Y) => new THREE.Vector3(p.x, y, p.z);
@@ -23,13 +24,33 @@ function line(points, color, opacity = 0.9, dashed = false) {
   return l;
 }
 
-function arc(from, to, height = 2.2, n = 16) {
-  const pts = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    pts.push(new THREE.Vector3(from.x + (to.x - from.x) * t, 1.2 + 4 * height * t * (1 - t) - 1.1 * t, from.z + (to.z - from.z) * t));
+/**
+ * Grenade predictions for one team's plans: where each planned grenade flies,
+ * bounces and goes off, and which of the team's own soldiers would be caught.
+ * @returns Map soldierId → [{ wpIndex, kind, path, bounces, burst, radius, at, danger: soldierId[] }]
+ */
+function predictGrenades(plans, estimates, predictor) {
+  const out = new Map();
+  for (const plan of plans) {
+    const est = estimates.get(plan.soldierId);
+    const list = [];
+    plan.waypoints.forEach((wp, i) => {
+      let k = 0;
+      for (const a of wp.actions) {
+        if (a.type !== 'grenade') continue;
+        const at = est.marks[i]?.booms[k++]?.at ?? Infinity;
+        if (!Number.isFinite(est.marks[i]?.arrive)) continue;
+        const pred = predictor.predict(wp, a, a.kind);
+        const danger = plans
+          .filter((p) => p.team === plan.team)
+          .filter((p) => predictor.reaches(pred.burst, a.kind, positionAt(estimates.get(p.soldierId), at), p.start.stance))
+          .map((p) => p.soldierId);
+        list.push({ wpIndex: i, kind: a.kind, ...pred, at, danger });
+      }
+    });
+    out.set(plan.soldierId, list);
   }
-  return pts;
+  return out;
 }
 
 /**
@@ -59,17 +80,21 @@ export function createPlanView(scene) {
    * @param map sim map
    * @param plans [{ soldierId, team, start:{x,z,stance}, waypoints, editable, released? }] (released: go codes)
    * @param selected { soldierId, index } | null
+   * @param predictor from plan/grenadePath.js (its `id` changes when the map state does), or null
+   * @returns Map soldierId → estimate (plus `.grenades`, see predictGrenades)
    */
-  function setPlans(map, plans, selected, closedDoors = null) {
-    const key = JSON.stringify([plans, selected, closedDoors && [...closedDoors]]);
+  function setPlans(map, plans, selected, closedDoors = null, predictor = null) {
+    const key = JSON.stringify([plans, selected, closedDoors && [...closedDoors], predictor?.id]);
     if (key === builtKey) return lastEstimates;
     builtKey = key;
     clear();
     lastEstimates = new Map();
+    for (const plan of plans) lastEstimates.set(plan.soldierId, estimatePlan(map, plan.start, plan.waypoints, closedDoors, plan.released ?? []));
+    const grenades = predictor ? predictGrenades(plans, lastEstimates, predictor) : new Map();
 
     for (const plan of plans) {
-      const est = estimatePlan(map, plan.start, plan.waypoints, closedDoors, plan.released ?? []);
-      lastEstimates.set(plan.soldierId, est);
+      const est = lastEstimates.get(plan.soldierId);
+      est.grenades = grenades.get(plan.soldierId) ?? [];
       const teamColor = TEAM_COLORS[plan.team];
       const isSelSoldier = selected?.soldierId === plan.soldierId;
       const opacity = plan.editable && !isSelSoldier ? 0.55 : 0.95;
@@ -109,23 +134,32 @@ export function createPlanView(scene) {
             charge.rotation.x = -Math.PI / 2;
             charge.position.set(a.x, 1.2, a.z);
             group.add(charge, line([v(wp, 0.5), v(a, 1.2)], 0xff3b30, 0.8, true));
-          } else if (a.type === 'grenade') {
-            const d = Math.hypot(a.x - wp.x, a.z - wp.z);
-            const k = d > GRENADE_RANGE ? GRENADE_RANGE / d : 1;
-            const land = { x: wp.x + (a.x - wp.x) * k, z: wp.z + (a.z - wp.z) * k };
-            const color = GRENADE_COLOR[a.kind] ?? GRENADE_COLOR.frag;
-            const radius = (GRENADE[a.kind] ?? GRENADE.frag).radius;
-            group.add(line(arc(wp, land), color, 0.9));
-            const blast = new THREE.Mesh(
-              new THREE.RingGeometry(radius - 0.08, radius, 48),
-              new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false }),
-            );
-            blast.rotation.x = -Math.PI / 2;
-            blast.position.set(land.x, 0.04, land.z);
-            group.add(blast);
           }
         }
       });
+
+      // Predicted grenade flights: the real arc, a marker at each wall bounce, the blast where it goes off.
+      for (const gr of est.grenades) {
+        const color = GRENADE_COLOR[gr.kind] ?? GRENADE_COLOR.frag;
+        const hurtsUs = gr.danger.length > 0;
+        group.add(line(gr.path.map((p) => new THREE.Vector3(p.x, Math.max(p.y, 0.08), p.z)), hurtsUs ? DANGER_COLOR : color, 0.95));
+        for (const b of gr.bounces) {
+          const mark = new THREE.Mesh(
+            new THREE.RingGeometry(0.12, 0.26, 16),
+            new THREE.MeshBasicMaterial({ color: BOUNCE_COLOR, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }),
+          );
+          mark.rotation.x = -Math.PI / 2;
+          mark.position.set(b.x, 0.6, b.z);
+          group.add(mark);
+        }
+        const blast = new THREE.Mesh(
+          new THREE.RingGeometry(gr.radius - (hurtsUs ? 0.2 : 0.08), gr.radius, 48),
+          new THREE.MeshBasicMaterial({ color: hurtsUs ? DANGER_COLOR : color, transparent: true, opacity: hurtsUs ? 0.8 : 0.35, depthWrite: false }),
+        );
+        blast.rotation.x = -Math.PI / 2;
+        blast.position.set(gr.burst.x, 0.04, gr.burst.z);
+        group.add(blast);
+      }
 
       if (est.atTurnEnd) {
         const tick = new THREE.Mesh(

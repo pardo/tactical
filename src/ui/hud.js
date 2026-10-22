@@ -10,6 +10,7 @@ const ICON = { stance: { crouch: '▼ Crouch', stand: '▲ Stand' }, face: '➜ 
 export const GRENADE_ICON = { frag: '💣', flash: '⚡', smoke: '☁' };
 
 const GRENADE_NAME = { frag: 'Frag', flash: 'Flash', smoke: 'Smoke' };
+const FIRE_LABEL = { onSight: '🎯 Fire at will ▸', return: '↩ Return fire ▸', hold: '🤫 Hold fire ▸' };
 
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -98,13 +99,13 @@ export function createHud(root, onAction) {
      * Top-right: the few controls used constantly, plus a ⋯ menu (text labels,
      * big targets) for the rest so the bar stays one row on a phone.
      */
-    buttons({ paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen, emotes = null }) {
+    buttons({ paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen, emotes = null, watching = true }) {
       const toggle = (action, label, on) => btn(action, `${on ? '☑' : '☐'} ${label}`, { cls: on ? 'on' : '' });
       set(
         'buttons',
-        JSON.stringify([paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen, emotes]),
+        JSON.stringify([paused, speed, showCones, showPlans, logOpen, muted, inMatch, menuOpen, emotes, watching]),
         inMatch
-          ? `<div class="row1">${btn('togglePause', paused ? '▶' : '⏸', { title: 'Play / pause' })}${btn('cycleSpeed', `${speed}×`, { title: 'Playback speed' })}${btn('toggleMenu', '⋯', { cls: menuOpen ? 'on' : '', title: 'More' })}${btn('quit', '✕', { title: 'Quit to menu' })}</div>` +
+          ? `<div class="row1">${watching ? btn('togglePause', paused ? '▶' : '⏸', { title: 'Play / pause' }) + btn('cycleSpeed', `${speed}×`, { title: 'Playback speed' }) : ''}${btn('toggleMenu', '⋯', { cls: menuOpen ? 'on' : '', title: 'More' })}${btn('quit', '✕', { title: 'Quit to menu' })}</div>` +
               (menuOpen
                 ? `<div class="more">${emotes ? `<div class="emotes">${emotes.map((e) => btn('emote', esc(e), { arg: e })).join('')}</div>` : ''}${toggle('toggleLog', 'Event log', logOpen)}${toggle('toggleCones', 'Vision cones', showCones)}${toggle('togglePlans', 'Show plans', showPlans)}${toggle('toggleMute', 'Sound', !muted)}${btn('resetCamera', '⟲ Reset camera')}${btn('fullscreen', '⤢ Fullscreen')}${btn('howTo', '❓ How to play')}</div>`
                 : '')
@@ -136,7 +137,8 @@ export function createHud(root, onAction) {
       const range = els.timeline.querySelector('input');
       if (document.activeElement !== range) range.value = cursor;
       const lab = els.timeline.querySelector('.tl-label');
-      if (lab.textContent !== label) lab.textContent = label;
+      const text = live ? '' : label;
+      if (lab.textContent !== text) lab.textContent = text;
     },
 
     /** Planning bar: soldier chips + undo + go. Spectator bar: auto + next turn. */
@@ -233,15 +235,22 @@ export function createHud(root, onAction) {
         'panel',
         JSON.stringify(model),
         `<div class="row info">${esc(model.label)} · waypoint ${model.index + 1}/${model.count} · arrive ${model.eta}${(model.booms ?? [])
-          .map((b) => ` · ${b.icon} goes off ${Number.isFinite(b.at) ? `${b.at.toFixed(1)}s` : 'later'}${b.late ? ' <b class="warn">⏭ next turn</b>' : ''}`)
+          .map(
+            (b) =>
+              ` · ${b.icon} goes off ${Number.isFinite(b.at) ? `${b.at.toFixed(1)}s` : 'later'}${b.late ? ' <b class="warn">⏭ next turn</b>' : ''}` +
+              `${b.bounces ? ' <b class="warn">↩ bounces off a wall</b>' : ''}` +
+              `${b.hits?.length ? ` <b class="warn">⚠ hits ${b.hits.map(esc).join(', ')}</b>` : ''}`,
+          )
           .join('')}</div>
-         <div class="row seg">
-           ${btn('move', '🚶 Walk', { arg: 'walk', cls: w.move === 'walk' ? 'on' : '', title: tip('move:walk') })}${btn('move', '🏃 Run', { arg: 'run', cls: w.move === 'run' ? 'on' : '', title: tip('move:run') })}
-           <span class="sep"></span>
-           ${btn('fire', '🎯 Fire at will', { arg: 'onSight', cls: w.fire === 'onSight' ? 'on' : '', title: tip('fire:onSight') })}${btn('fire', '↩ Return fire', { arg: 'return', cls: w.fire === 'return' ? 'on' : '', title: tip('fire:return') })}${btn('fire', '🤫 Hold fire', { arg: 'hold', cls: w.fire === 'hold' ? 'on' : '', title: tip('fire:hold') })}
+         <div class="row">
+           ${btn('cycleMove', w.move === 'run' ? '🏃 Run ▸' : '🚶 Walk ▸', { cls: 'on', title: tip(`move:${w.move}`) })}
+           ${btn('cycleFire', FIRE_LABEL[w.fire] ?? FIRE_LABEL.onSight, { cls: 'on', title: tip(`fire:${w.fire}`) })}
+           ${btn('pick', '👁 Look…', { arg: 'look', cls: model.pickMode === 'look' ? 'on' : '', title: tip('look') })}
+           ${btn('deleteWaypoint', '🗑', { cls: 'danger', title: 'Delete waypoint' })}
          </div>
          <div class="row tools">
-           ${btn('addCover', '🛡 Take cover', { title: tip('cover') })}
+           <span class="lbl">Then:</span>
+           ${btn('addCover', '🛡 Cover', { title: tip('cover') })}
            ${btn('addStance', '▼ Crouch', { arg: 'crouch', title: tip('stance:crouch') })}${btn('addStance', '▲ Stand', { arg: 'stand', title: tip('stance:stand') })}
            ${btn('pick', '➜ Face…', { arg: 'face', cls: model.pickMode === 'face' ? 'on' : '', title: tip('face') })}
            ${btn('addWait', '⏱ +1s', { title: tip('wait') })}
@@ -252,8 +261,6 @@ export function createHud(root, onAction) {
              .filter((k) => model.gear[k] > 0)
              .map((k) => btn('pick', `${GRENADE_ICON[k]} ${GRENADE_NAME[k]} ×${model.gear[k]}…`, { arg: `grenade:${k}`, cls: model.pickMode === `grenade:${k}` ? 'on' : '', title: tip(`grenade:${k}`) }))
              .join('')}
-           ${btn('pick', '👁 Look while moving…', { arg: 'look', cls: model.pickMode === 'look' ? 'on' : '', title: tip('look') })}
-           ${btn('deleteWaypoint', '🗑', { cls: 'danger', title: 'Delete waypoint' })}
          </div>
          ${actions || w.look ? `<div class="row actions"><span class="lbl">Queued:</span>${w.look ? btn('clearLook', '👁 Look ✕', { cls: 'action' }) : ''}${actions}</div>` : ''}
          <div class="row explain">${esc(model.explain ?? `📋 ${model.summary}`)}</div>`,

@@ -3,6 +3,13 @@ import * as THREE from 'three';
 /**
  * Low-poly soldier built from boxes: legs swing when walking, bend when
  * crouched, and the figure topples when dead. Local +Z is forward.
+ *
+ * Each role has its own silhouette, readable from the top-down camera:
+ *   sniper: wide-brim hat, ghillie cape, very long scoped rifle
+ *   lmg: bulky, big ammo box on a heavy gun
+ *   breacher: ballistic shield carried in front
+ *   demolition: large orange explosives pack
+ *   rifleman: standard helmet and pack
  */
 const GUN = {
   rifle: { len: 0.7, w: 0.07 },
@@ -21,12 +28,22 @@ const geo = {
   helmet: new THREE.SphereGeometry(0.155, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
   arm: new THREE.BoxGeometry(0.11, 0.11, 0.45),
   pack: new THREE.BoxGeometry(0.3, 0.32, 0.14),
+  brim: new THREE.CylinderGeometry(0.3, 0.3, 0.03, 16),
+  cape: new THREE.BoxGeometry(0.56, 0.5, 0.12),
+  scope: new THREE.BoxGeometry(0.07, 0.08, 0.3),
+  ammo: new THREE.BoxGeometry(0.2, 0.18, 0.22),
+  shield: new THREE.BoxGeometry(0.6, 0.8, 0.06),
+  bigPack: new THREE.BoxGeometry(0.44, 0.44, 0.26),
+  charge: new THREE.BoxGeometry(0.12, 0.1, 0.06),
 };
 const mats = {
   fatigues: new THREE.MeshStandardMaterial({ color: 0x4b5340 }),
   skin: new THREE.MeshStandardMaterial({ color: 0xc89a78 }),
   gear: new THREE.MeshStandardMaterial({ color: 0x2c2f2a }),
   gun: new THREE.MeshStandardMaterial({ color: 0x1b1d1f, metalness: 0.4, roughness: 0.5 }),
+  ghillie: new THREE.MeshStandardMaterial({ color: 0x5c6b34, roughness: 1 }),
+  shield: new THREE.MeshStandardMaterial({ color: 0x23262b, metalness: 0.3, roughness: 0.6 }),
+  explosive: new THREE.MeshStandardMaterial({ color: 0xff8a1f, emissive: 0x3a1600 }),
 };
 const gunGeos = new Map();
 
@@ -56,17 +73,38 @@ export function createSoldierModel(teamColor, role) {
   upper.add(
     mesh(geo.torso, mats.fatigues, 0, 0.3, 0),
     mesh(geo.vest, vestMat, 0, 0.36, 0),
-    mesh(geo.pack, mats.gear, 0, 0.33, -0.2),
     mesh(geo.head, mats.skin, 0, 0.73, 0.02),
-    mesh(geo.helmet, helmetMat, 0, 0.76, 0.01),
     mesh(geo.arm, mats.fatigues, 0.2, 0.42, 0.2),
     mesh(geo.arm, mats.fatigues, -0.12, 0.4, 0.24),
   );
+  if (role === 'sniper') {
+    // Boonie hat in team colour + ghillie cape over the shoulders.
+    upper.add(mesh(geo.brim, helmetMat, 0, 0.8, 0.01), mesh(geo.helmet, mats.ghillie, 0, 0.78, 0.01), mesh(geo.cape, mats.ghillie, 0, 0.5, -0.12));
+  } else {
+    upper.add(mesh(geo.helmet, helmetMat, 0, 0.76, 0.01));
+  }
+  if (role === 'demolition') {
+    const pack = mesh(geo.bigPack, mats.gear, 0, 0.36, -0.26);
+    upper.add(pack, mesh(geo.charge, mats.explosive, -0.1, 0.5, -0.4), mesh(geo.charge, mats.explosive, 0.1, 0.5, -0.4), mesh(geo.charge, mats.explosive, 0, 0.32, -0.4));
+  } else if (role !== 'sniper') {
+    upper.add(mesh(geo.pack, mats.gear, 0, 0.33, -0.2));
+  }
+  if (role === 'breacher') {
+    // Shield on the left arm, angled slightly outward.
+    const shield = mesh(geo.shield, mats.shield, -0.14, 0.32, 0.42);
+    shield.rotation.y = 0.25;
+    const stripe = mesh(new THREE.BoxGeometry(0.62, 0.08, 0.07), vestMat, -0.14, 0.62, 0.42);
+    stripe.rotation.y = 0.25;
+    upper.add(shield, stripe);
+  }
+  if (role === 'lmg') upper.scale.set(1.15, 1, 1.1); // broad and heavy
   const g = GUN[ROLE_WEAPON[role]] ?? GUN.rifle;
   const key = `${g.len}:${g.w}`;
   if (!gunGeos.has(key)) gunGeos.set(key, new THREE.BoxGeometry(g.w, g.w * 1.3, g.len));
   const gun = mesh(gunGeos.get(key), mats.gun, 0.1, 0.44, 0.22 + g.len / 2);
   upper.add(gun);
+  if (role === 'sniper') upper.add(mesh(geo.scope, mats.gun, 0.1, 0.53, 0.45));
+  if (role === 'lmg') upper.add(mesh(geo.ammo, mats.gear, 0.1, 0.32, 0.4));
   figure.add(upper);
 
   /** Muzzle position in figure space, for flashes. */
