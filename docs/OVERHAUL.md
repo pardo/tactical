@@ -24,12 +24,12 @@ vision cones, cameras, menu and animations. Gameplay and determinism must not ch
 - [x] Animated focus on chip double-tap, hotseat handoff and follow cam (glides; gestures stay 1:1)
 
 ## Phase 3 — Environment art
-- [ ] Renderer: sRGB + ACES tone mapping, soft shadows, warm key / cool fill lighting, subtle vignette
-- [ ] Procedural textures: concrete floor with tile variation, plaster/brick walls, wall caps, outside ground
-- [ ] Cover as real props: crates, sandbags, barrels, concrete barriers (deterministic choice by cell)
-- [ ] Doors with frames and hinged swing animation; breached doors leave debris
-- [ ] Baked ambient occlusion: floor darkens along wall bases; decals (stains, cracks, markings)
-- [ ] Per-map theme (Killhouse / Warehouse / Streets / Embassy palettes + props)
+- [x] Renderer: sRGB + ACES tone mapping, soft shadows, warm key / cool fill lighting, subtle vignette
+- [x] Procedural textures: concrete floor with tile variation, plaster/brick walls, wall caps, outside ground
+- [x] Cover as real props: crates, sandbags, barrels, concrete barriers (deterministic choice by cell)
+- [x] Doors with frames and hinged swing animation; breached doors leave debris
+- [x] Baked ambient occlusion: floor darkens along wall bases; decals (stains, cracks, markings)
+- [x] Per-map theme (Killhouse / Warehouse / Streets / Embassy palettes + props)
 
 ## Phase 4 — Soldiers
 - [ ] Rounded models: capsule limbs with elbows/knees, gloves, boots, visor, team armband/stripe
@@ -48,7 +48,7 @@ vision cones, cameras, menu and animations. Gameplay and determinism must not ch
 - [ ] Restyled title/logo, card and buttons (press/hover animation, entrance transitions)
 - [ ] Turn banners ("TURN 3 · EXECUTE"), animated toasts, smoother overlay fades
 - [ ] Game-over screen with per-soldier stats (kills, damage, shots)
-- [ ] Graphics quality setting (High/Low) persisted; Low disables shadows/post/particles
+- [x] Graphics quality setting (High/Low) persisted; Low disables shadows/post/particles
 
 ## Phase 7 — Wrap-up
 - [ ] Performance pass (draw calls, frame time on a throttled CPU), README screenshots, roadmap status

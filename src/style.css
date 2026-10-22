@@ -265,3 +265,12 @@ button.danger { color: #ff7a6b; }
 .howto dl.help { margin: 4px 0 10px; font-size: 13px; }
 .howto dl.help dt { font-weight: 600; margin-top: 6px; }
 .howto dl.help dd { margin: 1px 0 0 1.4em; color: var(--muted); }
+
+/* Soft vignette over the 3D view (not the HUD): draws the eye to the middle of the map. */
+#app::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
+}

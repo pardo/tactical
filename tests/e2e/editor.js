@@ -38,7 +38,7 @@ async (page) => {
   await touch('touchStart', a);
   for (let i = 1; i <= 12; i++) await touch('touchMove', { x: a.x + ((b.x - a.x) * i) / 12, y: a.y + ((b.y - a.y) * i) / 12 });
   await touch('touchEnd');
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(400);
   s = await state();
   if (!/#{5,}/.test(s.rows[3].slice(3, 10))) fail(`stroke not painted: ${s.rows[3]}`);
   if (s.rows[14 - 1 - 3] !== [...s.rows[3]].reverse().join('').replace(/A/g, 'B')) fail('stroke not mirrored');
@@ -51,18 +51,18 @@ async (page) => {
     E.state.tool = '#';
     for (let z = 1; z < 13; z++) E.paint(11, z);
   });
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(400);
   s = await state();
   if (s.ok || !s.errors.some((e) => /unreachable/.test(e))) fail(`split map not reported: ${JSON.stringify(s.errors)}`);
   if (!(await page.locator('#bottom .panel').innerText()).includes('unreachable')) fail('error not shown in panel');
   await page.getByRole('button', { name: '↶' }).tap();
-  await page.waitForTimeout(200); // validation is recomputed on the next frame
+  await page.waitForTimeout(400); // validation is recomputed on the next frame
   if (!(await state()).ok) fail('undo did not restore a valid map');
 
   // Name it, save, test-play.
   await page.locator('.map-name').fill('Phone test');
   await page.getByRole('button', { name: '▶ Test vs AI' }).tap();
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(400);
   const setup = await page.locator('#overlay .card').innerText();
   if (!setup.includes('★ Phone test')) fail(`custom map not selected in setup: ${setup}`);
   await page.getByRole('button', { name: 'Deploy ▶' }).tap();

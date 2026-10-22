@@ -7,7 +7,7 @@ async (page) => {
   await page.getByRole('button', { name: /Hotseat/ }).tap();
   if ((await page.locator('.squad').count()) !== 2) fail('setup should show both squads');
   await page.getByRole('button', { name: 'Deploy ▶' }).tap();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(800);
   const st = () =>
     page.evaluate(() => {
       const g = window.__tactical.game;
@@ -26,17 +26,17 @@ async (page) => {
       return { x: ((v.x + 1) / 2) * r.width, y: ((1 - v.y) / 2) * r.height };
     });
     await page.touchscreen.tap(at.x, at.y);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(800);
   };
   let s = await st();
   if (s.team !== 'A' || s.selTeam !== 'A' || s.viewer !== 'A') fail(`Blue planning state wrong ${JSON.stringify(s)}`);
   await tapNearSelected();
   if ((await st()).wps !== 1) fail('Blue waypoint not added');
   await page.getByRole('button', { name: 'GO ▶' }).tap();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(800);
   if (!(await page.locator('#overlay').innerText()).includes("Red's turn")) fail('no handoff screen');
   await page.getByRole('button', { name: 'Start planning' }).tap();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(800);
   s = await st();
   if (s.phase !== 'planning' || s.team !== 'B' || s.selTeam !== 'B' || s.viewer !== 'B') fail(`Red planning state wrong ${JSON.stringify(s)}`);
   const chips = await page.locator('.chip.team-B').count();
@@ -63,7 +63,7 @@ async (page) => {
   await page.getByRole('button', { name: 'GO ▶' }).tap();
   // Poll (not a fixed sleep) so a busy machine doesn't fail the test; the 1 s clock leaves time to see 'planning'.
   await page.waitForTimeout(4500);
-  for (let k = 0; k < 100 && (s = await st()).phase === 'simulating'; k++) await page.waitForTimeout(400);
+  for (let k = 0; k < 100 && (s = await st()).phase === 'simulating'; k++) await page.waitForTimeout(800);
   if (s.phase !== 'planning' || s.team !== 'A') fail(`turn 2 should start with Blue planning, got ${JSON.stringify(s)}`);
   await page.waitForTimeout(1600);
   if ((await st()).phase !== 'handoff') fail('planning clock did not auto-confirm Blue');

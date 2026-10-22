@@ -99,15 +99,15 @@ export function createHud(root, onAction) {
      * Top-right: the few controls used constantly, plus a ⋯ menu (text labels,
      * big targets) for the rest so the bar stays one row on a phone.
      */
-    buttons({ paused, speed, showCones, showPlans, director, logOpen, muted, inMatch, menuOpen, emotes = null, watching = true }) {
+    buttons({ paused, speed, showCones, showPlans, director, gfx, logOpen, muted, inMatch, menuOpen, emotes = null, watching = true }) {
       const toggle = (action, label, on) => btn(action, `${on ? '☑' : '☐'} ${label}`, { cls: on ? 'on' : '' });
       set(
         'buttons',
-        JSON.stringify([paused, speed, showCones, showPlans, director, logOpen, muted, inMatch, menuOpen, emotes, watching]),
+        JSON.stringify([paused, speed, showCones, showPlans, director, gfx, logOpen, muted, inMatch, menuOpen, emotes, watching]),
         inMatch
           ? `<div class="row1">${watching ? btn('togglePause', paused ? '▶' : '⏸', { title: 'Play / pause' }) + btn('cycleSpeed', `${speed}×`, { title: 'Playback speed' }) : ''}${btn('toggleMenu', '⋯', { cls: menuOpen ? 'on' : '', title: 'More' })}${btn('quit', '✕', { title: 'Quit to menu' })}</div>` +
               (menuOpen
-                ? `<div class="more">${emotes ? `<div class="emotes">${emotes.map((e) => btn('emote', esc(e), { arg: e })).join('')}</div>` : ''}${toggle('toggleLog', 'Event log', logOpen)}${toggle('toggleCones', 'Vision cones', showCones)}${toggle('togglePlans', 'Show plans', showPlans)}${toggle('toggleDirector', 'Auto camera', director)}${toggle('toggleMute', 'Sound', !muted)}${btn('resetCamera', '⟲ Reset camera')}${btn('fullscreen', '⤢ Fullscreen')}${btn('howTo', '❓ How to play')}</div>`
+                ? `<div class="more">${emotes ? `<div class="emotes">${emotes.map((e) => btn('emote', esc(e), { arg: e })).join('')}</div>` : ''}${toggle('toggleLog', 'Event log', logOpen)}${toggle('toggleCones', 'Vision cones', showCones)}${toggle('togglePlans', 'Show plans', showPlans)}${toggle('toggleDirector', 'Auto camera', director)}${toggle('toggleGfx', 'High graphics', gfx !== 'low')}${toggle('toggleMute', 'Sound', !muted)}${btn('resetCamera', '⟲ Reset camera')}${btn('fullscreen', '⤢ Fullscreen')}${btn('howTo', '❓ How to play')}</div>`
                 : '')
           : btn('fullscreen', '⤢', { title: 'Fullscreen' }),
       );

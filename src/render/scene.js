@@ -11,19 +11,29 @@ export function createScene(container) {
   // Phones report DPR 3+; capping at 2 keeps fill-rate sane with little visible loss.
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1a1d21);
+  scene.background = new THREE.Color(0x14171b);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
 
-  scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x30302a, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-  sun.position.set(8, 20, 6);
+  // Cool sky fill + warm low-ish sun for long, readable shadows; a weak cool rim from the opposite side.
+  scene.add(new THREE.HemisphereLight(0xc4d6f5, 0x3b3328, 1.35));
+  const sun = new THREE.DirectionalLight(0xfff0d8, 2.4);
+  sun.position.set(10, 22, 7);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.02;
+  sun.shadow.radius = 3;
   scene.add(sun);
+  const rim = new THREE.DirectionalLight(0x8fb0ff, 0.45);
+  rim.position.set(-12, 10, -9);
+  scene.add(rim);
 
   /** Fit the shadow camera to the playable area. */
   function setShadowBounds(halfSize) {
@@ -47,10 +57,37 @@ export function createScene(container) {
   // ResizeObserver also catches orientation changes and mobile URL-bar show/hide.
   new ResizeObserver(resize).observe(container);
 
+  /** True when WebGL runs on a CPU rasterizer (llvmpipe, SwiftShader): pick Low graphics by default. */
+  function softwareGL() {
+    const gl = renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+    return /llvmpipe|swiftshader|software|softpipe/i.test(name);
+  }
+
+  /**
+   * 'high': up to 2× pixel ratio, soft shadows. 'low': 1× pixels, no shadows — most of the
+   * cost on weak GPUs is fill rate.
+   */
+  function setQuality(q) {
+    const high = q !== 'low';
+    renderer.setPixelRatio(high ? Math.min(window.devicePixelRatio, 2) : 1);
+    if (renderer.shadowMap.enabled !== high) {
+      renderer.shadowMap.enabled = high;
+      // Shadow support is compiled into the shaders.
+      scene.traverse((o) => {
+        for (const m of [].concat(o.material ?? [])) m.needsUpdate = true;
+      });
+    }
+    resize();
+  }
+
   return {
     renderer,
     scene,
     camera,
+    softwareGL,
+    setQuality,
     onResize(fn) {
       resizeHandlers.push(fn);
       resize();

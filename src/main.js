@@ -85,7 +85,16 @@ const ui = {
   mapId: DEFAULT_MAP,
   gameMode: 'elimination',
   planTimer: 0, // seconds per planning phase, 0 = unlimited
+  /** 'high' | 'low'; saved per device, Low by default on software-rendered WebGL. */
+  gfx: 'high',
 };
+const GFX_KEY = 'tactical.gfx';
+try {
+  ui.gfx = localStorage.getItem(GFX_KEY) ?? (view.softwareGL() ? 'low' : 'high');
+} catch {
+  ui.gfx = view.softwareGL() ? 'low' : 'high';
+}
+view.setQuality(ui.gfx);
 const TIMER_OPTIONS = [0, 45, 90, 120];
 
 const settings = () => ({
@@ -681,7 +690,7 @@ function buildEditorView() {
   if (ed.group) disposeMapView(view.scene, ed.group);
   const def = E.toDef();
   ed.map = parseMap(def);
-  ed.group = createMapView(view.scene, ed.map, { type: 'zone', x: 0, z: 0, r: 3 });
+  ed.group = createMapView(view.scene, ed.map, { type: 'zone', x: 0, z: 0, r: 3 }, { floorPx: 16 });
   ed.validation = validateMapDef(def);
   const size = `${ed.map.width}x${ed.map.height}`;
   if (ed.size !== size) {
@@ -944,6 +953,15 @@ function onAction(action, arg) {
       break;
     case 'cycleSpeed':
       ui.speed = SPEEDS[(SPEEDS.indexOf(ui.speed) + 1) % SPEEDS.length];
+      break;
+    case 'toggleGfx':
+      ui.gfx = ui.gfx === 'low' ? 'high' : 'low';
+      view.setQuality(ui.gfx);
+      try {
+        localStorage.setItem(GFX_KEY, ui.gfx);
+      } catch {
+        // storage unavailable: the choice lasts for this session
+      }
       break;
     case 'toggleDirector':
       ui.director = !ui.director;
