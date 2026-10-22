@@ -3,7 +3,7 @@ import { initPhysics } from '../src/sim/physics.js';
 import { hashWorld } from '../src/sim/world.js';
 import { createMatch } from '../src/game/match.js';
 import { createAI } from '../src/ai/planner.js';
-import { createSession, createLinkedTransports } from '../src/net/session.js';
+import { createSession, createLinkedTransports, shouldAdopt } from '../src/net/session.js';
 import { sha256 } from '../src/net/sha256.js';
 import killhouse from '../src/maps/killhouse.js';
 
@@ -134,8 +134,14 @@ function createHub() {
     return ep.api;
   };
   return {
+    ends,
     host: () => endpoint('host'),
     guest: () => endpoint('guest'),
+    /** The link dies: both sides see the peer leave. */
+    drop() {
+      for (const role of ['host', 'guest']) ends[role].open = false;
+      for (const role of ['host', 'guest']) for (const cb of ends[role].h.leave) cb();
+    },
     connect() {
       for (const cb of ends.host.h.join) cb();
       for (const cb of ends.guest.h.join) cb();
@@ -143,89 +149,155 @@ function createHub() {
   };
 }
 
+/**
+ * A client that reacts to session events the way main.js does: start / plans,
+ * `sync` on (re)connect, adopt the longer history, then recommit.
+ */
+function mkClient(name, transport, isHost, { fastForward, saved = null } = {}) {
+  const p = { name, match: null, ai: null };
+  const rebuild = (info, localTeam) => {
+    p.match = createMatch({ mode: 'online', mapDef: killhouse, mapId: 'killhouse', seed: info.seed, squads: info.squads, localTeam });
+    p.ai = createAI(localTeam, 3);
+    fastForward(p.match, info.history);
+  };
+  p.info = () => ({ seed: p.match.seed, squads: p.match.squads, map: 'killhouse', mode: 'elimination', history: p.match.history });
+  p.session = createSession({
+    transport,
+    isHost,
+    onEvent: (e) => {
+      if (e.type === 'start') rebuild({ ...e, history: [] }, e.localTeam);
+      else if (e.type === 'plans') p.match.setRemotePlans(e.team, e.plans);
+      else if (e.type === 'peerJoined' && p.match) p.session.sync(p.info());
+      else if (e.type === 'sync') {
+        if (shouldAdopt(p.match && { seed: p.match.seed, history: p.match.history }, e)) {
+          rebuild(e, e.localTeam);
+          p.adopted = (p.adopted ?? 0) + 1;
+        }
+        p.session.recommit(p.match.turn);
+      } else if (e.type === 'desync') p.desync = e;
+      else if (e.type === 'cheat') p.cheat = e;
+    },
+  });
+  if (saved) {
+    // Reloaded page: restore from storage before the peer is back.
+    p.session.markStarted();
+    rebuild(saved, isHost ? 'A' : 'B');
+  }
+  return p;
+}
+
+const planAndCommit = (p) => {
+  if (p.match.phase !== 'planning') return;
+  const { plans } = p.ai.plan(p.match.world);
+  p.match.drafts[p.session.localTeam] = p.session.commit(p.match.turn, plans);
+  p.match.confirm();
+};
+const finishTurn = (p) => {
+  while (p.match.stepSim()) {
+    p.ai.observe(p.match.world);
+    if (p.match.phase !== 'simulating') break;
+  }
+  if (p.match.phase === 'turnEnd' || p.match.phase === 'over') p.session.sendState(p.match.turn, hashWorld(p.match.world));
+};
+/** Next turn for anyone between turns (a freshly rebuilt client ends in turnEnd). */
+const nextTurn = (p) => {
+  if (p.match.phase === 'turnEnd' || p.match.phase === 'idle') p.match.beginTurn();
+};
+function playToEnd(host, guest) {
+  while (host.match.phase !== 'over' && host.match.turn < 40) {
+    for (const p of [host, guest]) nextTurn(p);
+    for (const p of [host, guest]) planAndCommit(p);
+    for (const p of [host, guest]) finishTurn(p);
+    expect(hashWorld(guest.match.world)).toBe(hashWorld(host.match.world));
+  }
+  expect(host.desync ?? guest.desync ?? host.cheat ?? guest.cheat).toBeUndefined();
+  expect(guest.match.world.winner).toBe(host.match.world.winner);
+}
+
 describe('online reconnect', () => {
-  it('a guest that drops mid-turn rejoins, catches up by re-simulation, and stays in sync', async () => {
-    const { fastForward } = await import('../src/game/replay.js');
+  let fastForward;
+  beforeAll(async () => {
+    ({ fastForward } = await import('../src/game/replay.js'));
+  });
+
+  function startPair() {
     const hub = createHub();
-    const mk = (side, transport, isHost) => {
-      const p = { side };
-      p.session = createSession({
-        transport,
-        isHost,
-        onEvent: (e) => {
-          if (e.type === 'start' || e.type === 'resume') {
-            p.match = createMatch({ mode: 'online', mapDef: killhouse, mapId: 'killhouse', seed: e.seed, squads: e.squads, localTeam: e.localTeam });
-            p.ai = createAI(e.localTeam, 3);
-            if (e.type === 'resume') fastForward(p.match, e.history);
-          } else if (e.type === 'plans') p.match.setRemotePlans(e.team, e.plans);
-          else if (e.type === 'desync') p.desync = e;
-        },
-      });
-      return p;
-    };
-    const host = mk('host', hub.host(), true);
-    let guest = mk('guest', hub.guest(), false);
+    const host = mkClient('host', hub.host(), true, { fastForward });
+    const guest = mkClient('guest', hub.guest(), false, { fastForward });
     hub.connect();
     host.session.ready(['breacher', 'rifleman', 'lmg', 'sniper']);
     guest.session.ready(['breacher', 'rifleman', 'lmg', 'sniper']);
-
-    const planAndCommit = (p) => {
-      if (p.match.phase !== 'planning') return;
-      const { plans } = p.ai.plan(p.match.world);
-      p.match.drafts[p.session.localTeam] = p.session.commit(p.match.turn, plans);
-      p.match.confirm();
-    };
-    const finishTurn = (p) => {
-      while (p.match.stepSim()) {
-        p.ai.observe(p.match.world);
-        if (p.match.phase !== 'simulating') break;
-      }
-      p.session.sendState(p.match.turn, hashWorld(p.match.world));
-    };
-
-    // Three normal turns.
-    for (let t = 0; t < 3 && host.match.phase !== 'over'; t++) {
-      for (const p of [host, guest]) p.match.beginTurn();
+    for (let t = 0; t < 3; t++) {
+      for (const p of [host, guest]) nextTurn(p);
       for (const p of [host, guest]) planAndCommit(p);
       for (const p of [host, guest]) finishTurn(p);
     }
     expect(host.match.phase).not.toBe('over');
+    return { hub, host, guest };
+  }
 
+  it('a guest whose page dies mid-turn rejoins with nothing and is caught up by the host', () => {
+    const { hub, host, guest: oldGuest } = startPair();
     // Turn 4: host commits, then the guest's page dies before it commits.
-    host.match.beginTurn();
-    guest.match.beginTurn();
+    for (const p of [host, oldGuest]) nextTurn(p);
     planAndCommit(host);
     expect(host.match.phase).toBe('waiting');
-    guest.session.leave();
+    oldGuest.session.leave();
 
-    // A fresh guest client joins the room; the host resumes it.
-    guest = mk('guest2', hub.guest(), false);
+    const guest = mkClient('guest2', hub.guest(), false, { fastForward });
     hub.connect();
-    host.session.resume({
-      seed: host.match.seed,
-      squads: host.match.squads,
-      map: 'killhouse',
-      mode: 'elimination',
-      history: host.match.history,
-      turn: host.match.turn,
-    });
-    expect(guest.match.turn).toBe(3);
-    // Host is waiting in turn 4 with nothing simulated yet: both worlds are at the end of turn 3.
+    expect(guest.adopted).toBe(1);
     expect(hashWorld(guest.match.world)).toBe(hashWorld(host.match.world));
-
-    // Guest plans turn 4 → both simulate it → keep playing to the end in sync.
-    guest.match.beginTurn();
+    nextTurn(guest);
+    expect(guest.match.turn).toBe(4);
     planAndCommit(guest);
+    expect(host.match.phase).toBe('simulating');
+    for (const p of [host, guest]) finishTurn(p);
+    playToEnd(host, guest);
+  });
+
+  it('a host that reloads restores its saved match and both carry on', () => {
+    const { hub, host: oldHost, guest } = startPair();
+    for (const p of [oldHost, guest]) nextTurn(p);
+    planAndCommit(guest); // guest already pressed GO for turn 4
+    const saved = structuredClone(oldHost.info()); // what main.js keeps in localStorage
+    oldHost.session.leave();
+
+    const host = mkClient('host2', hub.host(), true, { fastForward, saved });
+    hub.connect();
+    expect(host.adopted ?? 0).toBe(0); // same history length: nothing to adopt
+    expect(guest.adopted ?? 0).toBe(0);
+    nextTurn(host);
+    expect(host.match.turn).toBe(4);
+    planAndCommit(host); // guest's GO was re-sent on reconnect, so this starts the turn
     expect(host.match.phase).toBe('simulating');
     expect(guest.match.phase).toBe('simulating');
     for (const p of [host, guest]) finishTurn(p);
-    while (host.match.phase !== 'over' && host.match.turn < 40) {
-      for (const p of [host, guest]) p.match.beginTurn();
-      for (const p of [host, guest]) planAndCommit(p);
-      for (const p of [host, guest]) finishTurn(p);
-      expect(hashWorld(guest.match.world)).toBe(hashWorld(host.match.world));
-    }
-    expect(host.desync ?? guest.desync).toBeUndefined();
-    expect(guest.match.world.winner).toBe(host.match.world.winner);
+    playToEnd(host, guest);
+  });
+
+  it('a dropped connection that swallowed a reveal recovers when both rejoin', () => {
+    const { hub, host, guest } = startPair();
+    for (const p of [host, guest]) nextTurn(p);
+    // The guest's reveal never reaches the host, then the link drops.
+    const realGuestEnd = hub.ends.guest;
+    const origSend = realGuestEnd.api.send;
+    realGuestEnd.api.send = (msg) => msg.t !== 'reveal' && origSend(msg);
+    planAndCommit(host);
+    planAndCommit(guest);
+    expect(guest.match.phase).toBe('simulating'); // guest got the host's plans
+    expect(host.match.phase).toBe('waiting'); // host never got the guest's
+    finishTurn(guest);
+    hub.drop();
+
+    // Both sides rejoin the room through fresh connections.
+    host.session.useTransport(() => hub.host());
+    guest.session.useTransport(() => hub.guest());
+    hub.connect();
+    // The guest's re-sent GO (commit + reveal) gives the host the missing plan: it plays turn 4.
+    expect(host.match.phase).toBe('simulating');
+    finishTurn(host);
+    expect(hashWorld(host.match.world)).toBe(hashWorld(guest.match.world));
+    playToEnd(host, guest);
   });
 });

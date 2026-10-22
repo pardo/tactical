@@ -28,7 +28,7 @@ import { startLoop } from './loop.js';
 import { createAudio } from './render/audio.js';
 import { exportReplay, validateReplay, fastForward, replayMapDef } from './game/replay.js';
 import { hashWorld } from './sim/world.js';
-import { createSession, EMOTES } from './net/session.js';
+import { createSession, shouldAdopt, EMOTES } from './net/session.js';
 import { createTrysteroTransport, randomRoomCode } from './net/trystero.js';
 
 await initPhysics();
@@ -114,6 +114,115 @@ function leaveRoom() {
   if (location.search.includes('room=')) history.replaceState(null, '', location.pathname);
 }
 
+// ------------------------------------------------- online: survive drops and reloads
+
+/**
+ * The running online match is saved after every phase change, so a reload or a reopened app can
+ * restore it. One entry per room and side (two tabs on one device share localStorage); each tab
+ * remembers its own entry in sessionStorage, which survives a reload but not a closed app.
+ */
+const SAVE_PREFIX = 'tactical:online:';
+const SAVE_MAX_AGE = 2 * 60 * 60 * 1000;
+/** After a drop, give the transport this long to recover on its own, then rejoin the room every REJOIN_EVERY. */
+const REJOIN_AFTER = 6000;
+const REJOIN_EVERY = 12000;
+
+/** What a peer needs to rebuild this match (see session `sync`). */
+function matchInfo() {
+  const m = g.match;
+  return { seed: m.seed, squads: m.squads, map: m.mapId, mode: m.gameMode, timer: ui.planTimer, history: m.history, mapDef: isCustomMap(m.mapId) ? m.mapDef : null };
+}
+
+const saveKey = () => `${SAVE_PREFIX}${net.code}:${net.isHost ? 'host' : 'guest'}`;
+
+function saveOnline() {
+  if (!net || g?.mode !== 'online') return;
+  try {
+    if (g.match.phase === 'over') return clearSavedOnline();
+    localStorage.setItem(saveKey(), JSON.stringify({ code: net.code, isHost: net.isHost, savedAt: Date.now(), ...matchInfo() }));
+    sessionStorage.setItem(SAVE_PREFIX, saveKey());
+  } catch {
+    // Storage full or blocked: reconnecting still works, only a reload can't restore.
+  }
+}
+
+/**
+ * This tab's save if it has one, else the newest recent save (app reopened). A join link
+ * (`room`) only ever resumes as the guest of that room.
+ */
+function loadSavedOnline(room = null) {
+  try {
+    const read = (k) => JSON.parse(localStorage.getItem(k) ?? 'null');
+    const mine = sessionStorage.getItem(SAVE_PREFIX);
+    const fresh = (s) => s && Date.now() - s.savedAt < SAVE_MAX_AGE && (!room || s.code === room);
+    if (mine && fresh(read(mine))) return read(mine);
+    const all = Object.keys(localStorage)
+      .filter((k) => k.startsWith(SAVE_PREFIX))
+      .map(read)
+      .filter((s) => fresh(s) && (!room || !s.isHost));
+    return all.sort((a, b) => b.savedAt - a.savedAt)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function clearSavedOnline() {
+  try {
+    if (net) localStorage.removeItem(saveKey());
+    sessionStorage.removeItem(SAVE_PREFIX);
+  } catch {
+    // ignore
+  }
+}
+
+/** Rebuild an online match from a sync message or a save, re-simulating its history. */
+function restoreOnline(info, localTeam) {
+  if (info.timer) ui.planTimer = info.timer;
+  startMatch('online', {
+    seed: info.seed,
+    squads: info.squads,
+    localTeam,
+    ...onlineMap(info),
+    gameMode: MODES[info.mode] ? info.mode : ui.gameMode,
+    history: info.history,
+  });
+}
+
+/** Reopen a saved online match (after a reload) and rejoin its room; the peer brings us up to date. */
+function resumeSavedOnline(saved) {
+  enterRoom(saved.code, saved.isHost);
+  if (!net) return;
+  net.session.markStarted();
+  restoreOnline(saved, saved.isHost ? 'A' : 'B');
+  net.lostAt = performance.now();
+  g.netBanner = '⏳ Rejoining the match…';
+}
+
+/** Leave and rejoin the room through a fresh connection, keeping the match and pending GO. */
+function rejoinRoom() {
+  if (!net) return;
+  net.lastRejoin = performance.now();
+  try {
+    net.session.useTransport(() => createTrysteroTransport(net.code));
+  } catch {
+    // Offline right now: try again on the next round.
+  }
+}
+
+/** Called every frame: keep retrying while an online match has lost its peer. */
+function keepConnected(now) {
+  if (!net || g?.mode !== 'online' || net.connected || g.match.phase === 'over') return;
+  if (now - (net.lostAt ?? now) < REJOIN_AFTER || now - (net.lastRejoin ?? 0) < REJOIN_EVERY) return;
+  rejoinRoom();
+}
+
+// Back online, or the app came back to the foreground: retry straight away.
+const retrySoon = () => {
+  if (net && g?.mode === 'online' && !net.connected) rejoinRoom();
+};
+window.addEventListener('online', retrySoon);
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && retrySoon());
+
 function lobbyOverlay() {
   const team = net.isHost ? 'A' : 'B';
   return overlays.lobby({
@@ -153,43 +262,38 @@ function onNetEvent(e) {
     case 'peerJoined':
       net.connected = true;
       if (!g) hud.overlay(lobbyOverlay());
-      else if (net.isHost && g.mode === 'online') {
-        // The guest came back (reload / dropped connection): send them the match so far.
-        g.netMessage = null;
-        ui.paused = false;
-        net.session.resume({
-          seed: g.match.seed,
-          squads: g.match.squads,
-          map: g.match.mapId,
-          mode: g.match.gameMode,
-          history: g.match.history,
-          turn: g.match.turn,
-          mapDef: isCustomMap(g.match.mapId) ? g.match.mapDef : null,
-        });
-        g.log.push({ i: g.cursor, team: null, cls: 'note', text: 'Opponent reconnected' });
+      else if (g.mode === 'online') {
+        // (Re)connected mid-match: both sides send what they have; the one behind catches up.
+        net.session.sync(matchInfo());
+        g.netBanner = null;
+        g.toast = { text: '✅ Connected', until: performance.now() + 2000 };
+        g.log.push({ i: g.cursor, team: null, cls: 'note', text: 'Opponent connected' });
       }
       break;
     case 'peerLeft':
       net.connected = false;
       if (g) {
-        ui.paused = true;
-        g.netMessage = overlays.message('Opponent disconnected', 'The other player left the room.');
+        // Keep playing locally (the current turn needs no network); GO is re-sent on reconnect.
+        net.lostAt = performance.now();
+        g.netBanner = '⚠ Connection lost · reconnecting…';
       } else hud.overlay(lobbyOverlay());
       break;
     case 'versionMismatch':
       hud.overlay(overlays.message('Version mismatch', 'Both players need the same game version. Reload and try again.'));
       break;
-    case 'resume':
-      startMatch('online', {
-        seed: e.seed,
-        squads: e.squads,
-        localTeam: e.localTeam,
-        ...onlineMap(e),
-        gameMode: MODES[e.mode] ? e.mode : ui.gameMode,
-        history: e.history,
-      });
-      g?.log.push({ i: g.cursor, team: null, cls: 'note', text: `Rejoined at turn ${g.match.turn}` });
+    case 'sync': {
+      const local = g?.mode === 'online' ? { seed: g.match.seed, history: g.match.history } : null;
+      if (shouldAdopt(local, e)) {
+        restoreOnline(e, e.localTeam);
+        g?.log.push({ i: g.cursor, team: null, cls: 'note', text: `Caught up: turn ${g.match.turn}` });
+        saveOnline();
+      }
+      if (g) {
+        g.netBanner = null;
+        net.session.recommit(g.match.turn);
+      }
       break;
+    }
     case 'start':
       if (!net.isHost) ui.planTimer = e.timer ?? 0;
       startMatch('online', {
@@ -279,6 +383,7 @@ function startMatch(mode, opts = {}) {
     overShown: false,
     watchSelected: null,
     netMessage: null,
+    netBanner: null, // online connection trouble, shown as a hint (not a blocking overlay)
     confirm: null,
     toast: null,
   };
@@ -370,6 +475,7 @@ function nextTurn() {
 }
 
 function onPhase() {
+  saveOnline();
   const { match } = g;
   if (match.phase === 'planning') {
     g.planning.begin(match.planningTeam, match.drafts[match.planningTeam], () => match.world.soldiers);
@@ -719,6 +825,8 @@ function onAction(action, arg) {
       if (g) g.confirm = null;
       return;
     case 'menu':
+      // Quitting on purpose: forget the saved online match too.
+      if (g?.mode === 'online') clearSavedOnline();
       endMatch();
       leaveRoom();
       return hud.overlay(overlays.menu());
@@ -1113,7 +1221,9 @@ function updateHud() {
     } else hud.panel(null);
 
     const toastText = g.toast && performance.now() < g.toast.until ? g.toast.text : '';
-    const hint = P.state.pickMode
+    const hint = g.netBanner
+      ? g.netBanner
+      : P.state.pickMode
       ? PICK_HINTS[P.state.pickMode]
       : toastText
         ? toastText
@@ -1129,7 +1239,7 @@ function updateHud() {
       hud.bar({ kind: 'spectate', auto: ui.auto, canContinue: match.phase === 'turnEnd' && live });
     } else hud.bar(null);
     const toast = g.toast && performance.now() < g.toast.until ? g.toast.text : '';
-    hud.hint(match.phase === 'planning' && !live ? 'Watching replay · tap LIVE to keep planning' : toast);
+    hud.hint(g.netBanner ?? (match.phase === 'planning' && !live ? 'Watching replay · tap LIVE to keep planning' : toast));
   }
 }
 
@@ -1258,6 +1368,7 @@ startLoop({
     const now = performance.now();
     const dt = Math.min((now - lastFrame) / 1000, 0.1);
     lastFrame = now;
+    keepConnected(now);
     marker.update(dt);
     labels.begin();
     if (ed) {
@@ -1301,8 +1412,11 @@ startLoop({
 });
 
 hud.buttons({ inMatch: false });
-const roomParam = new URLSearchParams(location.search).get('room');
-if (roomParam) enterRoom(roomParam.toUpperCase(), false);
+const roomParam = new URLSearchParams(location.search).get('room')?.toUpperCase();
+const savedOnline = loadSavedOnline(roomParam);
+// An online match interrupted by a reload / closed app comes back where it was.
+if (savedOnline) resumeSavedOnline(savedOnline);
+else if (roomParam) enterRoom(roomParam, false);
 else hud.overlay(overlays.menu());
 
 // Installable / offline in production builds (service workers need https or localhost).
@@ -1317,6 +1431,10 @@ if (import.meta.env.DEV) {
     ui,
     loadReplayText,
     importMapText: (t) => ed && importMapText(t),
+    rejoinRoom: () => rejoinRoom(),
+    get net() {
+      return net;
+    },
     get game() {
       return g;
     },

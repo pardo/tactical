@@ -1,7 +1,7 @@
 import { sha256 } from './sha256.js';
 import { sanitizeSquad } from '../sim/roles.js';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 /** Quick emotes: a fixed list, so nothing free-form ever crosses the wire. */
 export const EMOTES = ['👍', '😂', '😮', 'GG', '😡'];
 
@@ -16,15 +16,30 @@ const randomToken = () => Array.from(crypto.getRandomValues(new Uint32Array(4)),
  *           commits it sends `reveal {turn, payload, salt}`. Committing a hash
  *           first means nobody can read the other plan and then change theirs.
  *   check:  after each turn both send `state {turn, hash}` of the world.
- *   rejoin: if the guest reconnects mid-match the host sends `resume {seed,
- *           squads, map, mode, history}` and re-sends its pending commit; the
- *           guest re-simulates the history (deterministic) and carries on.
+ *   rejoin: whenever the peers (re)connect mid-match, BOTH send `sync {seed,
+ *           squads, map, mode, timer, history}`. Whoever has fewer turns in
+ *           its history (or no match at all, e.g. after a reload) rebuilds by
+ *           re-simulating the longer one (see shouldAdopt). Then both call
+ *           recommit() so a GO that was lost in the drop is sent again.
  *
  * transport: { send(msg), onMessage(cb), onPeerJoin(cb), onPeerLeave(cb), leave() }
+ *   It can be replaced with useTransport() (rejoining the room after a drop)
+ *   without losing the turn state.
  * onEvent receives { type: 'peerJoined' | 'peerLeft' | 'start' | 'remoteCommitted'
- *   | 'plans' | 'desync' | 'cheat' | 'versionMismatch', ... }
+ *   | 'plans' | 'sync' | 'desync' | 'cheat' | 'versionMismatch', ... }
  */
-export function createSession({ transport, isHost, onEvent }) {
+
+/**
+ * Should this client rebuild its match from a peer's `sync`? Yes if it has no
+ * match, or the peer's match is the same one but further along. Histories only
+ * ever grow, and both sides' histories are prefixes of the same game.
+ * @param local { seed, history } | null
+ */
+export function shouldAdopt(local, remote) {
+  return !local || remote.history.length > local.history.length;
+}
+export function createSession({ transport: initialTransport, isHost, onEvent }) {
+  let transport = initialTransport;
   const localTeam = isHost ? 'A' : 'B';
   const remoteTeam = isHost ? 'B' : 'A';
   const turns = new Map(); // turn → { local, remote, revealed, localState, remoteState }
@@ -62,17 +77,31 @@ export function createSession({ transport, isHost, onEvent }) {
     }
   }
 
-  transport.onPeerJoin(() => {
-    peer = true;
-    onEvent({ type: 'peerJoined' });
-    if (localSquad) transport.send({ t: 'ready', v: PROTOCOL_VERSION, squad: localSquad });
-  });
-  transport.onPeerLeave(() => {
-    peer = false;
-    onEvent({ type: 'peerLeft' });
-  });
+  // Messages from a replaced transport are ignored (see useTransport).
+  function bind(t) {
+    t.onPeerJoin(() => {
+      if (t !== transport) return;
+      peer = true;
+      // The peer may have reloaded and planned this turn afresh: forget commits whose plans
+      // never arrived, and be ready to reveal ours again once their new commit comes in.
+      for (const ts of turns.values()) {
+        if (ts.remote?.plans) continue;
+        ts.remote = undefined;
+        ts.revealed = false;
+      }
+      onEvent({ type: 'peerJoined', started });
+      if (localSquad && !started) transport.send({ t: 'ready', v: PROTOCOL_VERSION, squad: localSquad });
+    });
+    t.onPeerLeave(() => {
+      if (t !== transport) return;
+      peer = false;
+      onEvent({ type: 'peerLeft' });
+    });
+    t.onMessage((msg) => t === transport && receive(msg));
+  }
+  bind(transport);
 
-  transport.onMessage((msg) => {
+  function receive(msg) {
     if (!msg || typeof msg !== 'object') return;
     switch (msg.t) {
       case 'ready':
@@ -118,21 +147,22 @@ export function createSession({ transport, isHost, onEvent }) {
       case 'state':
         turnState(msg.turn).remoteState = String(msg.hash);
         return compareState(msg.turn);
-      case 'resume':
-        if (isHost) return;
+      case 'sync':
+        if (msg.v !== PROTOCOL_VERSION) return onEvent({ type: 'versionMismatch', remote: msg.v });
         started = true;
         return onEvent({
-          type: 'resume',
+          type: 'sync',
           seed: msg.seed >>> 0,
           squads: { A: sanitizeSquad(msg.squads?.A), B: sanitizeSquad(msg.squads?.B) },
           map: String(msg.map ?? ''),
           mode: String(msg.mode ?? ''),
+          timer: Math.max(0, Math.min(600, Number(msg.timer) || 0)),
           history: Array.isArray(msg.history) ? msg.history : [],
           mapDef: msg.mapDef ?? null,
           localTeam,
         });
     }
-  });
+  }
 
   return {
     localTeam,
@@ -163,15 +193,36 @@ export function createSession({ transport, isHost, onEvent }) {
       return JSON.parse(payload);
     },
 
-    /** Host: bring a reconnected guest up to date (see `rejoin` above). */
-    resume({ seed, squads, map, mode, history, turn, mapDef = null }) {
-      transport.send({ t: 'resume', seed, squads, map, mode, history, mapDef });
-      // Forget the old guest's commit for the current turn and re-announce ours.
+    /** A match is under way (restored from storage): don't run the lobby handshake again. */
+    markStarted() {
+      started = true;
+    },
+
+    /** Send our view of the match so a (re)connected peer can catch up (see `rejoin` above). */
+    sync({ seed, squads, map, mode, timer = 0, history, mapDef = null }) {
+      transport.send({ t: 'sync', v: PROTOCOL_VERSION, seed, squads, map, mode, timer, history, mapDef });
+    },
+
+    /**
+     * After a reconnect: send this turn's commit again, and the reveal if the peer's
+     * commit is already known. Duplicates are ignored on the other side.
+     */
+    recommit(turn) {
       const ts = turns.get(turn);
-      if (!ts) return;
-      ts.remote = undefined;
-      ts.revealed = false;
-      if (ts.local) transport.send({ t: 'commit', turn, hash: sha256(`${ts.local.payload}|${ts.local.salt}`) });
+      if (!ts?.local) return;
+      transport.send({ t: 'commit', turn, hash: sha256(`${ts.local.payload}|${ts.local.salt}`) });
+      if (ts.remote?.hash) transport.send({ t: 'reveal', turn, payload: ts.local.payload, salt: ts.local.salt });
+    },
+
+    /**
+     * Rejoin through a fresh transport (e.g. after the network dropped), keeping turn state.
+     * Takes a factory: the old room must be left before the new one is joined.
+     */
+    useTransport(makeTransport) {
+      transport.leave();
+      transport = makeTransport();
+      peer = false;
+      bind(transport);
     },
 
     sendState(turn, hash) {
