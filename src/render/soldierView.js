@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { FOV } from '../sim/soldier/perception.js';
 import { MAX_HP } from '../sim/soldier/soldier.js';
 import { frameVision, HEARD_TTL } from '../game/recorder.js';
 import { createSoldierModel } from './soldierModel.js';
@@ -25,7 +24,6 @@ function freshestNoise(frame, id) {
   const b = heardBy(frame, 'B', id);
   return !a ? b : !b ? a : a.tick >= b.tick ? a : b;
 }
-const CONE_RADIUS = 6;
 
 function lerpAngle(a, b, t) {
   let d = b - a;
@@ -56,13 +54,12 @@ function textSprite(text, color) {
 /**
  * Soldiers drawn from recorded frames (live or replay), interpolated between two
  * frames. Handles stance, death, fog of war (last-seen rings and sound ghosts),
- * HP bars, number tags and vision cones.
+ * HP bars and number tags (cones: visionView).
  */
 export function createSoldierView(scene, labels) {
   const views = new Map();
   const ringGeo = new THREE.RingGeometry(0.42, 0.52, 32);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd34d, depthWrite: false });
-  const coneGeo = new THREE.CircleGeometry(CONE_RADIUS, 24, Math.PI / 2 - FOV / 2, FOV);
   const ghostGeo = new THREE.RingGeometry(0.3, 0.42, 24);
   const echoBodyGeo = new THREE.CapsuleGeometry(0.28, 0.9, 4, 10);
   const rippleGeo = new THREE.RingGeometry(0.9, 1, 40);
@@ -77,14 +74,6 @@ export function createSoldierView(scene, labels) {
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.02;
-
-    const cone = new THREE.Mesh(
-      coneGeo,
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }),
-    );
-    // CircleGeometry lies in XY with angle 0 on +X; rotate so the fan points along local +Z (the soldier's forward).
-    cone.rotation.x = Math.PI / 2;
-    cone.position.y = 0.03;
 
     // Number only: the role reads from the model's silhouette (and the squad chips), not more text.
     const tag = textSprite(labels[s.id]?.split(' ')[1] ?? '?', color);
@@ -107,7 +96,7 @@ export function createSoldierView(scene, labels) {
     status.position.y = 0.025;
     status.visible = false;
 
-    root.add(figure, ring, cone, status);
+    root.add(figure, ring, status);
     const overlay = new THREE.Group(); // not rotated with the soldier
     overlay.add(tag, hpBack, hpBar);
 
@@ -137,14 +126,14 @@ export function createSoldierView(scene, labels) {
     ripple.visible = false;
 
     scene.add(root, overlay, ghost, echo, ripple);
-    return { root, figure, model, ring, cone, status, overlay, hpBar, ghost, echo, echoMat, ripple, lastSeen: null, fall: 0 };
+    return { root, figure, model, ring, status, overlay, hpBar, ghost, echo, echoMat, ripple, lastSeen: null, fall: 0 };
   }
 
   /**
    * @param prev,curr frames to interpolate between
-   * @param opts { viewerTeam: 'A'|'B'|null, selectedId, showCones }
+   * @param opts { viewerTeam: 'A'|'B'|null, selectedId }
    */
-  function draw(prev, curr, alpha, { viewerTeam = null, selectedId = null, showCones = false, playing = true, dt = 0 } = {}) {
+  function draw(prev, curr, alpha, { viewerTeam = null, selectedId = null, playing = true, dt = 0 } = {}) {
     const vision = viewerTeam ? frameVision(curr, viewerTeam) : null;
     const prevById = new Map(prev.soldiers.map((s) => [s.id, s]));
     for (const s of curr.soldiers) {
@@ -189,7 +178,6 @@ export function createSoldierView(scene, labels) {
       // Walk cycle from the sim clock, so replays animate identically.
       v.model.setPose({ stance: s.stance, moving: s.moving, walkPhase: (curr.tick / 60) * 9 + s.id, dead: !s.alive, fall: v.fall });
       v.ring.visible = s.alive && s.id === selectedId;
-      v.cone.visible = s.alive && (showCones || s.id === selectedId);
 
       v.status.visible = s.alive && (s.blind || s.suppressed);
       if (v.status.visible) v.status.material.color.setHex(s.blind ? 0xffffff : 0xffa040);

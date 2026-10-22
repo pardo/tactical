@@ -15,6 +15,7 @@ import { MODES, MODE_IDS } from './sim/objective.js';
 import { createScene } from './render/scene.js';
 import { createMapView, disposeMapView } from './render/mapView.js';
 import { createSoldierView } from './render/soldierView.js';
+import { createVisionView } from './render/visionView.js';
 import { createPlanView } from './render/planView.js';
 import { createFxView } from './render/fxView.js';
 import { createCameraRig } from './render/cameraRig.js';
@@ -372,6 +373,7 @@ function startMatch(mode, opts = {}) {
     recorder: createRecorder(match.world),
     mapView: createMapView(view.scene, map, match.world.objective),
     soldiers: createSoldierView(view.scene, match.labels),
+    vision: createVisionView(view.scene, map),
     plans: createPlanView(view.scene),
     fx: createFxView(view.scene, map),
     planning: createPlanning(map),
@@ -449,6 +451,7 @@ function endMatch() {
   if (!g) return;
   disposeMapView(view.scene, g.mapView);
   g.soldiers.dispose();
+  g.vision.dispose();
   g.plans.hide();
   g.fx.clear();
   g.predictor?.dispose();
@@ -1390,6 +1393,7 @@ startLoop({
         if (s?.alive && visible) rig.focusOn(s.x, s.z);
       }
       g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones, playing: moving && !ui.paused, dt });
+      g.vision.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones });
       // Not playing (planning, paused, scrubbing): show live grenades' fuse and blast radius.
       const still = !moving || ui.paused;
       g.fx.drawGrenades(prev, curr, a, still);

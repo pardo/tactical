@@ -3,6 +3,7 @@ import * as THREE from 'three';
 export function createScene(container) {
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
+    stencil: true, // vision cones and fog of war use the stencil buffer
     powerPreference: 'high-performance',
     // ?capture keeps the frame buffer so headless browsers can screenshot the canvas.
     preserveDrawingBuffer: new URLSearchParams(location.search).has('capture'),
