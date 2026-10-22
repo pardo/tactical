@@ -64,6 +64,18 @@ export function createSoldierView(scene, labels) {
   const echoBodyGeo = new THREE.CapsuleGeometry(0.28, 0.9, 4, 10);
   const rippleGeo = new THREE.RingGeometry(0.9, 1, 40);
   const v3 = new THREE.Vector3();
+  // Soft contact shadow: grounds the figures even with shadows off (Low graphics).
+  const blobCanvas = document.createElement('canvas');
+  blobCanvas.width = blobCanvas.height = 64;
+  const bg = blobCanvas.getContext('2d');
+  const grad = bg.createRadialGradient(32, 32, 4, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  bg.fillStyle = grad;
+  bg.fillRect(0, 0, 64, 64);
+  const blobGeo = new THREE.PlaneGeometry(1.1, 1.1);
+  const blobMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(blobCanvas), transparent: true, depthWrite: false });
+  let clock = 0;
 
   function create(s) {
     const color = TEAM_COLORS[s.team];
@@ -74,6 +86,9 @@ export function createSoldierView(scene, labels) {
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.02;
+    const blob = new THREE.Mesh(blobGeo, blobMat);
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = 0.015;
 
     // Number only: the role reads from the model's silhouette (and the squad chips), not more text.
     const tag = textSprite(labels[s.id]?.split(' ')[1] ?? '?', color);
@@ -96,7 +111,7 @@ export function createSoldierView(scene, labels) {
     status.position.y = 0.025;
     status.visible = false;
 
-    root.add(figure, ring, status);
+    root.add(blob, figure, ring, status);
     const overlay = new THREE.Group(); // not rotated with the soldier
     overlay.add(tag, hpBack, hpBar);
 
@@ -126,7 +141,7 @@ export function createSoldierView(scene, labels) {
     ripple.visible = false;
 
     scene.add(root, overlay, ghost, echo, ripple);
-    return { root, figure, model, ring, status, overlay, hpBar, ghost, echo, echoMat, ripple, lastSeen: null, fall: 0 };
+    return { root, figure, model, ring, status, overlay, hpBar, ghost, echo, echoMat, ripple, lastSeen: null, fall: 0, phase: 0, px: s.x, pz: s.z, kick: 0, fallDir: Math.PI, blob };
   }
 
   /**
@@ -136,6 +151,15 @@ export function createSoldierView(scene, labels) {
   function draw(prev, curr, alpha, { viewerTeam = null, selectedId = null, playing = true, dt = 0 } = {}) {
     const vision = viewerTeam ? frameVision(curr, viewerTeam) : null;
     const prevById = new Map(prev.soldiers.map((s) => [s.id, s]));
+    const byId = new Map(curr.soldiers.map((s) => [s.id, s]));
+    clock += dt;
+    // This frame's shots (recoil) and hits (which way the dead fall).
+    const shooters = new Set();
+    const hitBy = new Map();
+    for (const e of curr.events ?? []) {
+      if (e.type === 'shot') shooters.add(e.from);
+      else if (e.type === 'damage' && e.sourceId !== undefined && byId.has(e.sourceId)) hitBy.set(e.id, byId.get(e.sourceId));
+    }
     for (const s of curr.soldiers) {
       let v = views.get(s.id);
       if (!v) views.set(s.id, (v = create(s)));
@@ -175,9 +199,33 @@ export function createSoldierView(scene, labels) {
         v.fall = playing ? Math.min(1, v.fall + dt / 0.35) : 1;
         v.overlay.visible = false;
       } else v.fall = 0;
-      // Walk cycle from the sim clock, so replays animate identically.
-      v.model.setPose({ stance: s.stance, moving: s.moving, walkPhase: (curr.tick / 60) * 9 + s.id, dead: !s.alive, fall: v.fall });
+      // Stride follows distance covered, so feet don't slide at any playback speed or when scrubbing.
+      const moved = Math.hypot(x - v.px, z - v.pz);
+      v.px = x;
+      v.pz = z;
+      if (moved < 1) v.phase += moved * 5.4;
+      const speed = Math.hypot(s.x - p.x, s.z - p.z) * 60;
+      if (shooters.has(s.id)) v.kick = 1;
+      v.kick = Math.max(0, v.kick - dt / 0.12);
+      const src = hitBy.get(s.id);
+      // Fall away from whoever hit us last (figure-local angle; π = backwards).
+      if (src) v.fallDir = Math.atan2(s.x - src.x, s.z - src.z) - s.h;
+      v.model.setPose({
+        stance: s.stance,
+        moving: s.moving,
+        walkPhase: v.phase + s.id,
+        speed,
+        dead: !s.alive,
+        fall: v.fall,
+        fallDir: v.fallDir,
+        aiming: s.visible.length > 0 || v.kick > 0,
+        kick: v.kick,
+        reload: s.reloading ? (curr.tick % 120) / 120 : -1,
+        time: clock + s.id,
+      });
       v.ring.visible = s.alive && s.id === selectedId;
+      if (v.ring.visible) v.ring.scale.setScalar(1 + Math.sin(clock * 5) * 0.06);
+      v.blob.visible = s.alive;
 
       v.status.visible = s.alive && (s.blind || s.suppressed);
       if (v.status.visible) v.status.material.color.setHex(s.blind ? 0xffffff : 0xffa040);

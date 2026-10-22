@@ -28,7 +28,16 @@ scene.add(floor);
 
 const model = createSoldierModel(TEAM_COLORS[team], role);
 model.figure.rotation.y = yaw;
-model.setPose({ stance: pose === 'crouch' ? 'crouch' : 'stand', moving: pose === 'walk', walkPhase: 1.2, dead: pose === 'dead', fall: 1 });
+model.setPose({
+  stance: pose === 'crouch' ? 'crouch' : 'stand',
+  moving: pose === 'walk' || pose === 'run',
+  speed: pose === 'run' ? 4 : 1.5,
+  walkPhase: 1.2,
+  dead: pose === 'dead',
+  fall: 1,
+  aiming: pose === 'aim',
+  reload: pose === 'reload' ? 0.5 : -1,
+});
 scene.add(model.figure);
 
 const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 50);

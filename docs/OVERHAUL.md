@@ -32,10 +32,10 @@ vision cones, cameras, menu and animations. Gameplay and determinism must not ch
 - [x] Per-map theme (Killhouse / Warehouse / Streets / Embassy palettes + props)
 
 ## Phase 4 — Soldiers
-- [ ] Rounded models: capsule limbs with elbows/knees, gloves, boots, visor, team armband/stripe
-- [ ] Animation: idle breathing, arm swing walk, run cycle, aim pose when firing, recoil kick, reload
-- [ ] Deaths fall away from the shot direction; blood/dust puff
-- [ ] Selection ring pulse, contact shadow blob under each soldier
+- [x] Rounded models: capsule limbs with elbows/knees, gloves, boots, visor, team armband/stripe
+- [x] Animation: idle breathing, arm swing walk, run cycle, aim pose when firing, recoil kick, reload
+- [x] Deaths fall away from the shot direction (hit puff: Phase 5)
+- [x] Selection ring pulse, contact shadow blob under each soldier
 
 ## Phase 5 — FX
 - [ ] Muzzle flash with short point light; glowing tracers; shell casings
