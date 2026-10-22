@@ -1,6 +1,6 @@
 # Tactical — Roadmap
 
-> **Status (2026-10-22):** M0–M8 done, M9/M10 mostly done. 90 unit tests + 6 browser e2e tests. Unchecked items below are what remains.
+> **Status (2026-10-22):** M0–M8 done, M9/M10 mostly done; visual overhaul done (see [OVERHAUL.md](OVERHAUL.md)). 90 unit tests + 6 browser e2e tests. Unchecked items below are what remains.
 
 Simultaneous-turn tactical squad shooter in the browser (Door Kickers × Frozen Synapse).
 Both players plan freely, confirm, then the world simulates **5 seconds**. Soldiers execute

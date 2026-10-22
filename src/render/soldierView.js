@@ -261,7 +261,18 @@ export function createSoldierView(scene, labels) {
   }
 
   function dispose() {
-    for (const v of views.values()) scene.remove(v.root, v.overlay, v.ghost, v.echo, v.ripple);
+    for (const v of views.values()) {
+      scene.remove(v.root, v.overlay, v.ghost, v.echo, v.ripple);
+      v.model.dispose();
+      // Per-soldier materials (tags, bars, rings); shared geometry stays for the next match.
+      for (const group of [v.overlay, v.echo, v.ghost, v.ripple, v.status]) {
+        group.traverse((o) => {
+          if (!o.material || o.material === ringMat || o.material === blobMat) return;
+          o.material.map?.dispose();
+          o.material.dispose();
+        });
+      }
+    }
     views.clear();
   }
 

@@ -7,6 +7,13 @@ Both players plan their 4-soldier squads, press **GO**, and the plans play out a
 for 5 seconds. Soldiers act on their own within your orders: they spot, react, aim, shoot, take
 cover and turn toward threats, so *how* you move (holding an angle vs. running in) decides fights.
 
+<p>
+  <img src="docs/img/menu.jpg" width="200" alt="Main menu over a live map">
+  <img src="docs/img/planning.jpg" width="200" alt="Planning on a phone: vision cones clipped by walls, fog of war">
+  <img src="docs/img/game-over.jpg" width="200" alt="Game-over scoreboard">
+</p>
+<img src="docs/img/streets.jpg" width="612" alt="Streets map from the spectator camera">
+
 ## Play
 
 - **vs AI**, **AI vs AI** (spectate, with full-match replay and an event log), **Hotseat**
@@ -27,6 +34,13 @@ cover and turn toward threats, so *how* you move (holding an angle vs. running i
   a tap before GO. Grenades that would go off after the 5 s are flagged ⏭; live ones show a fuse
   countdown and blast radius while planning.
 - Save any match as a replay file (a few KB) and load it to rewatch.
+- Looks: vision cones cut by walls, doors and smoke, with fog of war over what your squad can't
+  see; per-map art (baked floors with ambient occlusion, textured walls, crates, sandbags,
+  barrels, barriers, planters), jointed soldiers that walk, run, kneel, aim, recoil and reload;
+  muzzle flashes, tracers, casings, impacts, fireballs, smoke columns and scorch marks; a camera
+  that glides, frames your squad facing the enemy and follows firefights. Graphics High/Low in
+  the ⋯ menu (Low is picked automatically on software-rendered WebGL). All art is generated in
+  code: no image or model downloads.
 - Installable as an app (PWA) from the browser menu when served over https.
 
 ## Develop

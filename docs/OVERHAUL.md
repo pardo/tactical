@@ -51,4 +51,4 @@ vision cones, cameras, menu and animations. Gameplay and determinism must not ch
 - [x] Graphics quality setting (High/Low) persisted; Low disables shadows/post/particles
 
 ## Phase 7 — Wrap-up
-- [ ] Performance pass (draw calls, frame time on a throttled CPU), README screenshots, roadmap status
+- [x] Performance pass (draw calls, frame time on a throttled CPU), README screenshots, roadmap status

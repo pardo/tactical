@@ -323,5 +323,11 @@ export function createSoldierModel(teamColor, role) {
   }
 
   setPose({ stance: 'stand', moving: false });
-  return { figure, setPose, muzzle };
+  /** Free this soldier's own materials (geometry and the rest are shared). */
+  function dispose() {
+    vestMat.dispose();
+    helmetMat.dispose();
+  }
+
+  return { figure, setPose, muzzle, dispose };
 }

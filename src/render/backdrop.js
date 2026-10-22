@@ -95,7 +95,10 @@ export function createBackdrop(view, mapDef) {
 
   function dispose() {
     disposeMapView(scene, group);
-    for (const w of walkers) scene.remove(w.root);
+    for (const w of walkers) {
+      scene.remove(w.root);
+      w.model.dispose();
+    }
   }
 
   return { update, dispose };
