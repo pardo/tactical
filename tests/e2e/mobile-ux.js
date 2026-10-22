@@ -12,7 +12,7 @@ async (page) => {
   });
   if (!setupFits) fail('setup card overflows the screen');
   await page.getByRole('button', { name: 'Deploy ▶' }).tap();
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(400);
   const chipsFit = await page.evaluate(() => {
     const c = document.querySelector('#bottom .chips');
     return c.scrollWidth <= c.clientWidth && document.querySelector('#bottom .bar .go').getBoundingClientRect().right <= innerWidth;
@@ -31,6 +31,7 @@ async (page) => {
   const chips = page.locator('.chip');
   await chips.nth(2).tap();
   await chips.nth(2).tap();
+  await page.waitForFunction(() => !window.__tactical.rig.gliding(), null, { timeout: 8000 }); // the camera glides there
   const s3 = await page.evaluate(() => {
     const g = window.__tactical.game;
     const s = g.match.world.soldiers.find((x) => x.id === g.planning.state.selectedId);
@@ -41,15 +42,15 @@ async (page) => {
 
   // Quit asks first; "Keep playing" keeps the match.
   await page.getByRole('button', { name: '✕' }).tap();
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(400);
   if (!(await page.locator('#overlay').innerText()).includes('Quit match?')) fail('no quit confirmation');
   await page.getByRole('button', { name: 'Keep playing' }).tap();
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(400);
   if (await page.locator('#overlay').isVisible()) fail('overlay still visible after Keep playing');
   if (!(await page.evaluate(() => !!window.__tactical.game))) fail('match ended');
   await page.getByRole('button', { name: '✕' }).tap();
   await page.getByRole('button', { name: 'Quit' }).tap();
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(400);
   if (!(await page.locator('#overlay').innerText()).includes('TACTICAL')) fail('did not return to menu');
   return 'ok: layout fits, framing, chip focus, quit confirm, collapsed log';
 }

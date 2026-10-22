@@ -18,10 +18,10 @@ vision cones, cameras, menu and animations. Gameplay and determinism must not ch
 - [x] Selected soldier's cone highlighted; cone animates (sweeps) when heading changes
 
 ## Phase 2 — Cameras
-- [ ] Smoothed camera: pan/zoom/rotate/focus ease toward targets instead of jumping
-- [ ] Better framing: start view shows the squad *and* the map (no empty void), clamp to map bounds
-- [ ] Playback director: during the turn, camera gently follows the action (firefights / selected soldier), off by user pan
-- [ ] Animated focus on chip double-tap and on kills; snap-rotate buttons ease 90°
+- [x] Smoothed camera: pan/zoom/rotate/focus ease toward targets instead of jumping
+- [x] Better framing: start view shows the squad *and* the map (no empty void), clamp to map bounds
+- [x] Playback director: during the turn, camera gently follows the action (firefights / selected soldier), off by user pan
+- [x] Animated focus on chip double-tap, hotseat handoff and follow cam (glides; gestures stay 1:1)
 
 ## Phase 3 — Environment art
 - [ ] Renderer: sRGB + ACES tone mapping, soft shadows, warm key / cool fill lighting, subtle vignette

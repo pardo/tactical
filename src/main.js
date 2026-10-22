@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { helpFor, describeWaypoint } from './ui/help.js';
 import { createGrenadePredictor } from './plan/grenadePath.js';
 import './style.css';
@@ -75,6 +76,8 @@ const ui = {
   paused: false,
   speed: 1,
   showCones: false,
+  /** Camera drifts toward visible firefights during playback until the player moves it. */
+  director: true,
   showPlans: true,
   logOpen: true,
   auto: true,
@@ -348,23 +351,13 @@ function startMatch(mode, opts = {}) {
   view.setShadowBounds(half + 2);
   // Start framed on your own squad (spectators: whole map), looking toward the enemy.
   const own = mode === 'hotseat' ? 'A' : match.viewerTeam;
-  const mine = own ? match.world.soldiers.filter((s) => s.team === own) : [];
-  // Portrait phones are narrow: centre on the squad itself (nudged toward the middle) and zoom in
-  // enough to tell the soldiers apart. Wider screens frame halfway between squad and map centre.
-  const portrait = viewW < viewH;
-  const k = portrait ? 0.7 : 0.5;
-  const focus = mine.length
-    ? { x: (mine.reduce((a, s) => a + s.x, 0) / mine.length) * k, z: (mine.reduce((a, s) => a + s.z, 0) / mine.length) * k }
-    : { x: 0, z: 0 };
-  rig = createCameraRig(view.camera, {
-    bounds: half,
-    distance: map.width * (mine.length ? 0.65 : 0.8),
-    focus,
-    yaw: own === 'B' ? Math.PI : 0,
-  });
+  rig = createCameraRig(view.camera, { bounds: { x: map.width / 2, z: map.height / 2 }, distance: map.width * 0.8 });
   rig.setViewport(viewW, viewH);
-  if (!mine.length) rig.fitWidth(map.width); // spectating: whole map in view
-  else if (portrait) rig.fitWidth(Math.min(map.width, PORTRAIT_VIEW_WIDTH));
+  if (own) {
+    const v = teamView(match, own);
+    rig.glideTo(v, { instant: true });
+    rig.setHome(v);
+  } else rig.fitWidth(Math.max(map.width, viewW < viewH ? 0 : map.height * (viewW / viewH))); // spectating: whole map in view
 
   g = {
     mode,
@@ -463,12 +456,77 @@ const atLive = () => g.cursor >= frames().length - 1;
 const editing = () => g && g.match.phase === 'planning' && atLive();
 const soldierOf = (id) => g.match.world.soldiers.find((s) => s.id === id);
 
+const centroid = (list) => ({ x: list.reduce((a, s) => a + s.x, 0) / list.length, z: list.reduce((a, s) => a + s.z, 0) / list.length });
+
+/**
+ * Camera framing for a team: rotated so the enemy side is "up" the screen, with the squad
+ * in the lower part of the view and the map ahead of it filling the rest. Portrait phones
+ * zoom so the map's cross-section (capped) fits the screen width.
+ */
+function teamView(match, team) {
+  const { map } = match;
+  const alive = match.world.soldiers.filter((s) => s.alive);
+  const mine = alive.filter((s) => s.team === team);
+  const theirs = alive.filter((s) => s.team !== team);
+  if (!mine.length) return null;
+  const c = centroid(mine);
+  const e = theirs.length ? centroid(theirs) : { x: 0, z: 0 };
+  let fx = e.x - c.x;
+  let fz = e.z - c.z;
+  const len = Math.hypot(fx, fz) || 1;
+  fx /= len;
+  fz /= len;
+  // Square to the grid: walls read best straight up/across the screen.
+  if (Math.abs(fx) > Math.abs(fz)) [fx, fz] = [Math.sign(fx), 0];
+  else [fx, fz] = [0, Math.sign(fz) || -1];
+  const portrait = viewW < viewH;
+  const across = fx ? map.height : map.width;
+  const distance = portrait ? rig.distanceForWidth(Math.min(across, PORTRAIT_VIEW_WIDTH)) : Math.max(map.width, map.height) * 0.6;
+  // Look ahead of the squad: they sit low on screen, the ground toward the enemy above them.
+  const ahead = Math.min(len * 0.4, distance * 0.16);
+  let x = c.x + fx * ahead;
+  let z = c.z + fz * ahead;
+  // Across the screen, keep the view's edges inside the map rather than showing the void past it.
+  const viewHalf = Math.min(across, PORTRAIT_VIEW_WIDTH) / 2;
+  const slack = Math.max(0, across / 2 - viewHalf);
+  if (portrait && fx) z = THREE.MathUtils.clamp(z, -slack, slack);
+  else if (portrait) x = THREE.MathUtils.clamp(x, -slack, slack);
+  return { x, z, yaw: Math.atan2(-fx, -fz), distance };
+}
+
 /** Point the camera at a team's living soldiers, facing the enemy side. */
 function frameTeam(team) {
-  const mine = g.match.world.soldiers.filter((s) => s.team === team && s.alive);
-  if (!mine.length) return;
-  rig.state.yaw = team === 'B' ? Math.PI : 0;
-  rig.focusOn(mine.reduce((a, s) => a + s.x, 0) / mine.length, mine.reduce((a, s) => a + s.z, 0) / mine.length);
+  const v = teamView(g.match, team);
+  if (!v) return;
+  rig.glideTo(v, { rate: 4 });
+  rig.setHome(v);
+}
+
+/**
+ * Playback director: while a turn plays and the player hasn't moved the camera, drift
+ * toward firefights the viewer can see if they're near the edge of the screen.
+ */
+const directorPt = new THREE.Vector3();
+function directCamera(curr) {
+  if (!ui.director || rig.userMoved || g.watchSelected !== null || rig.gliding()) return;
+  const team = g.match.viewerTeam;
+  const shown = team ? frameVisionSet(curr, team) : null;
+  const pts = [];
+  for (const s of curr.soldiers) {
+    if (!s.alive || !s.visible.length) continue;
+    if (team && s.team !== team) continue;
+    pts.push(s);
+    for (const id of s.visible) {
+      const e = curr.soldiers.find((o) => o.id === id);
+      if (e && (!shown || shown.has(id) || e.team === team)) pts.push(e);
+    }
+  }
+  if (!pts.length) return;
+  const c = centroid(pts);
+  directorPt.set(c.x, 0.5, c.z).project(view.camera);
+  // Inside the middle of the screen already: leave the camera alone.
+  if (Math.abs(directorPt.x) < 0.45 && Math.abs(directorPt.y) < 0.4) return;
+  rig.glideTo({ x: c.x, z: c.z }, { rate: 1.2 });
 }
 
 function nextTurn() {
@@ -493,6 +551,7 @@ function onPhase() {
       g.log.push({ i: frame, team: s.team, cls: 'note', text: `T${match.turn} ${match.labels[id]}: ${note}` });
     }
     ui.paused = false;
+    rig.userMoved = false;
   }
 }
 
@@ -885,6 +944,9 @@ function onAction(action, arg) {
       break;
     case 'cycleSpeed':
       ui.speed = SPEEDS[(SPEEDS.indexOf(ui.speed) + 1) % SPEEDS.length];
+      break;
+    case 'toggleDirector':
+      ui.director = !ui.director;
       break;
     case 'toggleCones':
       ui.showCones = !ui.showCones;
@@ -1377,9 +1439,11 @@ startLoop({
     if (ed) {
       buildEditorView();
       keyboard.update(rig, dt);
+      rig.update(dt);
       updateEditorHud();
     } else if (g) {
       keyboard.update(rig, dt);
+      rig.update(dt);
       const f = frames();
       const curr = f[g.cursor];
       const prev = f[Math.max(0, g.cursor - 1)];
@@ -1392,6 +1456,7 @@ startLoop({
         const visible = s && (!g.match.viewerTeam || s.team === g.match.viewerTeam || frameVisionSet(curr, g.match.viewerTeam).has(s.id));
         if (s?.alive && visible) rig.focusOn(s.x, s.z);
       }
+      if (moving && !ui.paused && g.match.phase === 'simulating') directCamera(curr);
       g.soldiers.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones, playing: moving && !ui.paused, dt });
       g.vision.draw(prev, curr, a, { viewerTeam: g.match.viewerTeam, selectedId, showCones: ui.showCones });
       // Not playing (planning, paused, scrubbing): show live grenades' fuse and blast radius.

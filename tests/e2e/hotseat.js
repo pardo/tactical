@@ -7,7 +7,7 @@ async (page) => {
   await page.getByRole('button', { name: /Hotseat/ }).tap();
   if ((await page.locator('.squad').count()) !== 2) fail('setup should show both squads');
   await page.getByRole('button', { name: 'Deploy ▶' }).tap();
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(400);
   const st = () =>
     page.evaluate(() => {
       const g = window.__tactical.game;
@@ -26,23 +26,34 @@ async (page) => {
       return { x: ((v.x + 1) / 2) * r.width, y: ((1 - v.y) / 2) * r.height };
     });
     await page.touchscreen.tap(at.x, at.y);
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(400);
   };
   let s = await st();
   if (s.team !== 'A' || s.selTeam !== 'A' || s.viewer !== 'A') fail(`Blue planning state wrong ${JSON.stringify(s)}`);
   await tapNearSelected();
   if ((await st()).wps !== 1) fail('Blue waypoint not added');
   await page.getByRole('button', { name: 'GO ▶' }).tap();
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(400);
   if (!(await page.locator('#overlay').innerText()).includes("Red's turn")) fail('no handoff screen');
   await page.getByRole('button', { name: 'Start planning' }).tap();
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(400);
   s = await st();
   if (s.phase !== 'planning' || s.team !== 'B' || s.selTeam !== 'B' || s.viewer !== 'B') fail(`Red planning state wrong ${JSON.stringify(s)}`);
   const chips = await page.locator('.chip.team-B').count();
   if (chips !== 4) fail(`expected Red's 4 chips, got ${chips}`);
-  const cam = await page.evaluate(() => ({ ...window.__tactical.rig.state }));
-  if (!(cam.x > 5) || Math.abs(cam.yaw - Math.PI) > 1e-6) fail(`camera not on Red's side: ${JSON.stringify(cam)}`);
+  await page.waitForFunction(() => !window.__tactical.rig.gliding(), null, { timeout: 8000 });
+  // Red's squad framed low on screen, Blue's side "up".
+  const cam = await page.evaluate(() => {
+    const t = window.__tactical;
+    const screenY = (team) => {
+      const list = t.game.match.world.soldiers.filter((s) => s.team === team);
+      const x = list.reduce((a, s) => a + s.x, 0) / list.length;
+      const z = list.reduce((a, s) => a + s.z, 0) / list.length;
+      return t.view.camera.position.clone().set(x, 0, z).project(t.view.camera).y;
+    };
+    return { x: t.rig.state.x, red: screenY('B'), blue: screenY('A') };
+  });
+  if (!(cam.x > 3) || !(cam.blue > cam.red)) fail(`camera not on Red's side facing Blue: ${JSON.stringify(cam)}`);
   await tapNearSelected();
   s = await st();
   if (s.wps !== 1) fail(`Red waypoint not added (${s.wps})`);
@@ -52,7 +63,7 @@ async (page) => {
   await page.getByRole('button', { name: 'GO ▶' }).tap();
   // Poll (not a fixed sleep) so a busy machine doesn't fail the test; the 1 s clock leaves time to see 'planning'.
   await page.waitForTimeout(4500);
-  for (let k = 0; k < 100 && (s = await st()).phase === 'simulating'; k++) await page.waitForTimeout(100);
+  for (let k = 0; k < 100 && (s = await st()).phase === 'simulating'; k++) await page.waitForTimeout(400);
   if (s.phase !== 'planning' || s.team !== 'A') fail(`turn 2 should start with Blue planning, got ${JSON.stringify(s)}`);
   await page.waitForTimeout(1600);
   if ((await st()).phase !== 'handoff') fail('planning clock did not auto-confirm Blue');
