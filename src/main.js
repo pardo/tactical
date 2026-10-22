@@ -45,6 +45,8 @@ const PICK_HINTS = {
 };
 const LOG_LINES = 10;
 const EXPLAIN_MS = 8000;
+/** Metres of map across a portrait phone screen at the start of a match. */
+const PORTRAIT_VIEW_WIDTH = 18;
 
 const app = document.getElementById('app');
 let view;
@@ -242,8 +244,12 @@ function startMatch(mode, opts = {}) {
   // Start framed on your own squad (spectators: whole map), looking toward the enemy.
   const own = mode === 'hotseat' ? 'A' : match.viewerTeam;
   const mine = own ? match.world.soldiers.filter((s) => s.team === own) : [];
+  // Portrait phones are narrow: centre on the squad itself (nudged toward the middle) and zoom in
+  // enough to tell the soldiers apart. Wider screens frame halfway between squad and map centre.
+  const portrait = viewW < viewH;
+  const k = portrait ? 0.7 : 0.5;
   const focus = mine.length
-    ? { x: mine.reduce((a, s) => a + s.x, 0) / mine.length / 2, z: mine.reduce((a, s) => a + s.z, 0) / mine.length / 2 }
+    ? { x: (mine.reduce((a, s) => a + s.x, 0) / mine.length) * k, z: (mine.reduce((a, s) => a + s.z, 0) / mine.length) * k }
     : { x: 0, z: 0 };
   rig = createCameraRig(view.camera, {
     bounds: half,
@@ -253,6 +259,7 @@ function startMatch(mode, opts = {}) {
   });
   rig.setViewport(viewW, viewH);
   if (!mine.length) rig.fitWidth(map.width); // spectating: whole map in view
+  else if (portrait) rig.fitWidth(Math.min(map.width, PORTRAIT_VIEW_WIDTH));
 
   g = {
     mode,
@@ -1113,7 +1120,7 @@ function updateHud() {
       : net?.opponentReady
         ? 'Opponent is ready'
       : s && !(P.state.drafts[s.id]?.length)
-        ? 'Tap the map to add a waypoint · hold for a running one'
+        ? 'Tap map: walk here · hold: run'
         : '';
     hud.hint(hint);
   } else {

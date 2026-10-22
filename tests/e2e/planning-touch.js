@@ -27,15 +27,28 @@ async (page) => {
       };
     });
 
+  // Screen point of the ground `d` metres from the selected soldier toward the map centre (sideways by `side`).
+  const groundNear = (d, side = 0) =>
+    page.evaluate(([d, side]) => {
+      const t = window.__tactical;
+      const g = t.game;
+      const sel = g.match.world.soldiers.find((x) => x.id === g.planning.state.selectedId);
+      const v = t.view.camera.position.clone().set(sel.x - Math.sign(sel.x) * d, 0, sel.z + side).project(t.view.camera);
+      const r = document.querySelector('#app').getBoundingClientRect();
+      return { x: ((v.x + 1) / 2) * r.width, y: ((1 - v.y) / 2) * r.height };
+    }, [d, side]);
+
   // Turn in place: soldier panel → Face… → tap the map. No waypoint needed.
   await page.getByRole('button', { name: '➜ Face…' }).tap();
-  await page.touchscreen.tap(200, 200);
+  const faceAt = await groundNear(5, 2);
+  await page.touchscreen.tap(faceAt.x, faceAt.y);
   await page.waitForTimeout(100);
   let s = await st();
   if (s.wps.length !== 1 || s.wps[0].actions[0]?.type !== 'face') fail(`face in place: ${JSON.stringify(s.wps)}`);
   await page.getByRole('button', { name: '🗑 Clear plan' }).tap();
 
-  await page.touchscreen.tap(140, 330);
+  const wpAt = await groundNear(3);
+  await page.touchscreen.tap(wpAt.x, wpAt.y);
   await page.waitForTimeout(100);
   s = await st();
   if (s.wps.length !== 1) fail(`expected 1 waypoint after tap, got ${s.wps.length}`);
@@ -53,7 +66,8 @@ async (page) => {
   await page.getByRole('button', { name: '▼ Crouch' }).tap();
   await page.getByRole('button', { name: '⏱ +1s' }).tap();
   await page.getByRole('button', { name: /Flash/ }).tap();
-  await page.touchscreen.tap(200, 300);
+  const flashAt = await groundNear(6, 1);
+  await page.touchscreen.tap(flashAt.x, flashAt.y);
   await page.waitForTimeout(100);
   s = await st();
   const types = s.wps[0].actions.map((a) => a.type).join(',');

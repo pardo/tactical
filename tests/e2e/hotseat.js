@@ -15,13 +15,13 @@ async (page) => {
       const sel = g.match.world.soldiers.find((s) => s.id === P.selectedId);
       return { phase: g.match.phase, team: P.team, selTeam: sel?.team, viewer: g.match.viewerTeam, wps: P.drafts?.[P.selectedId]?.length ?? 0 };
     });
-  // Tap the ground 1.5 m from the selected soldier, toward the middle of the map.
+  // Tap the ground 3 m from the selected soldier, toward the middle of the map (clear of the squad).
   const tapNearSelected = async () => {
     const at = await page.evaluate(() => {
       const t = window.__tactical;
       const g = t.game;
       const sel = g.match.world.soldiers.find((x) => x.id === g.planning.state.selectedId);
-      const v = t.view.camera.position.clone().set(sel.x - Math.sign(sel.x) * 1.5, 0, sel.z).project(t.view.camera);
+      const v = t.view.camera.position.clone().set(sel.x - Math.sign(sel.x) * 3, 0, sel.z).project(t.view.camera);
       const r = document.querySelector('#app').getBoundingClientRect();
       return { x: ((v.x + 1) / 2) * r.width, y: ((1 - v.y) / 2) * r.height };
     });

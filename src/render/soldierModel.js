@@ -34,7 +34,7 @@ const geo = {
   ammo: new THREE.BoxGeometry(0.2, 0.18, 0.22),
   shield: new THREE.BoxGeometry(0.6, 0.8, 0.06),
   bigPack: new THREE.BoxGeometry(0.44, 0.44, 0.26),
-  charge: new THREE.BoxGeometry(0.12, 0.1, 0.06),
+  charge: new THREE.BoxGeometry(0.16, 0.1, 0.22),
 };
 const mats = {
   fatigues: new THREE.MeshStandardMaterial({ color: 0x4b5340 }),
@@ -85,7 +85,8 @@ export function createSoldierModel(teamColor, role) {
   }
   if (role === 'demolition') {
     const pack = mesh(geo.bigPack, mats.gear, 0, 0.36, -0.26);
-    upper.add(pack, mesh(geo.charge, mats.explosive, -0.1, 0.5, -0.4), mesh(geo.charge, mats.explosive, 0.1, 0.5, -0.4), mesh(geo.charge, mats.explosive, 0, 0.32, -0.4));
+    // Charges strapped on top of the pack, where the overhead camera sees them.
+    upper.add(pack, mesh(geo.charge, mats.explosive, -0.11, 0.63, -0.26), mesh(geo.charge, mats.explosive, 0.11, 0.63, -0.26));
   } else if (role !== 'sniper') {
     upper.add(mesh(geo.pack, mats.gear, 0, 0.33, -0.2));
   }

@@ -1,12 +1,14 @@
 #!/bin/sh
 # Browser smoke tests. Needs `npm run dev` running and playwright-cli on PATH.
-# The 3D canvas is not checked (no GPU in headless here); these test UI flow and game logic in a real browser.
+# WebGL renders through Mesa's software OpenGL (llvmpipe) via cli.config.json; Chromium's own
+# SwiftShader crashes on the first draw under PRoot/arm64. Needs the Mesa EGL/GL packages
+# (libegl-mesa0 libgl1-mesa-dri libgles2) installed.
 # Each test gets a fresh browser so WebGL contexts and peers don't leak between tests.
 dir=$(cd "$(dirname "$0")" && pwd)
 status=0
 for t in "$dir"/*.js; do
   name=$(basename "$t" .js)
-  playwright-cli open --mobile about:blank >/dev/null 2>&1
+  playwright-cli open --mobile --config="$dir/cli.config.json" about:blank >/dev/null 2>&1
   if out=$(playwright-cli --raw run-code --filename="$t" 2>&1); then
     echo "PASS $name: $out"
   else

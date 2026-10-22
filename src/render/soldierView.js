@@ -5,6 +5,15 @@ import { frameVision, HEARD_TTL } from '../game/recorder.js';
 import { createSoldierModel } from './soldierModel.js';
 
 export const TEAM_COLORS = { A: 0x4a90e2, B: 0xe2574a };
+/**
+ * Number tag and HP bar keep a fixed size on screen (sizeAttenuation off: scale is
+ * a fraction of ~0.83 × screen height at fov 45°), so zooming in shows the model
+ * instead of a huge disc over it.
+ */
+const TAG_SIZE = 0.028;
+const HP_W = 0.034;
+const HP_H = 0.0045;
+const HP_BELOW = 3.6; // HP bar sits this many of its own heights under the tag's centre
 /** Ripple radius (m) a second after the noise, roughly in proportion to how far it carries. */
 const RIPPLE_SIZE = { step: 2, door: 3, shot: 4, breach: 5 };
 
@@ -38,8 +47,8 @@ function textSprite(text, color) {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(text, 32, 34);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
-  sprite.scale.setScalar(0.5);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, sizeAttenuation: false }));
+  sprite.scale.setScalar(TAG_SIZE);
   sprite.renderOrder = 10;
   return sprite;
 }
@@ -80,12 +89,13 @@ export function createSoldierView(scene, labels) {
     // Number only: the role reads from the model's silhouette (and the squad chips), not more text.
     const tag = textSprite(labels[s.id]?.split(' ')[1] ?? '?', color);
     tag.position.y = 2.1;
-    const hpBack = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x000000, depthTest: false }));
-    hpBack.scale.set(0.7, 0.08, 1);
-    hpBack.position.y = 1.8;
+    const hpBack = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x000000, depthTest: false, sizeAttenuation: false }));
+    hpBack.scale.set(HP_W, HP_H, 1);
+    hpBack.center.set(0.5, HP_BELOW);
+    hpBack.position.y = 2.1;
     hpBack.renderOrder = 10;
-    const hpBar = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x5ee07a, depthTest: false }));
-    hpBar.position.y = 1.8;
+    const hpBar = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x5ee07a, depthTest: false, sizeAttenuation: false }));
+    hpBar.position.y = 2.1;
     hpBar.renderOrder = 11;
 
     // Status ring: white = blinded by a flashbang, orange = suppressed.
@@ -185,8 +195,10 @@ export function createSoldierView(scene, labels) {
       if (v.status.visible) v.status.material.color.setHex(s.blind ? 0xffffff : 0xffa040);
 
       const hp = Math.max(0, s.hp) / (s.maxHp ?? MAX_HP);
-      v.hpBar.scale.set(0.7 * hp, 0.08, 1);
-      v.hpBar.position.x = -0.35 * (1 - hp);
+      // Fill grows from the bar's left edge: anchor it so its left side lines up with the background's.
+      v.hpBar.visible = hp > 0;
+      v.hpBar.scale.set(HP_W * Math.max(hp, 0.01), HP_H, 1);
+      v.hpBar.center.set(0.5 / Math.max(hp, 0.01), HP_BELOW);
       v.hpBar.material.color.setHex(hp > 0.5 ? 0x5ee07a : hp > 0.25 ? 0xffc14d : 0xff5a4d);
     }
   }

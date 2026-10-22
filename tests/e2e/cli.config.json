@@ -1,0 +1,11 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "channel": "chromium-headless-shell",
+      "headless": true,
+      "chromiumSandbox": false,
+      "args": ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=gl-egl", "--ignore-gpu-blocklist"]
+    }
+  }
+}
