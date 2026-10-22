@@ -44,10 +44,10 @@ vision cones, cameras, menu and animations. Gameplay and determinism must not ch
 - [x] Flashbang: white bloom; screen shake on nearby blasts
 
 ## Phase 6 — Menu & UI animation
-- [ ] Main menu over a live animated 3D backdrop (slow orbit around a map with AI soldiers)
-- [ ] Restyled title/logo, card and buttons (press/hover animation, entrance transitions)
-- [ ] Turn banners ("TURN 3 · EXECUTE"), animated toasts, smoother overlay fades
-- [ ] Game-over screen with per-soldier stats (kills, damage, shots)
+- [x] Main menu over a live animated 3D backdrop (slow orbit around a map with AI soldiers)
+- [x] Restyled title/logo, card and buttons (press/hover animation, entrance transitions)
+- [x] Turn banners ("TURN 3 · EXECUTE"), animated toasts, smoother overlay fades
+- [x] Game-over screen with per-soldier stats (kills, damage, shots)
 - [x] Graphics quality setting (High/Low) persisted; Low disables shadows/post/particles
 
 ## Phase 7 — Wrap-up

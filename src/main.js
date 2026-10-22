@@ -8,7 +8,7 @@ import { makeWaypoint, GO_CODE_NAMES } from './sim/plan.js';
 import { createMatch, TEAM_NAMES } from './game/match.js';
 import { ROLES, WEAPONS, DEFAULT_SQUAD, cycleRole } from './sim/roles.js';
 import { createRecorder, frameVision as frameVisionSet } from './game/recorder.js';
-import { MAPS, DEFAULT_MAP, getMapDef, listMapIds, isCustomMap, saveCustomMap } from './maps/index.js';
+import { MAPS, MAP_IDS, DEFAULT_MAP, getMapDef, listMapIds, isCustomMap, saveCustomMap } from './maps/index.js';
 import { validateMapDef } from './maps/validate.js';
 import { createEditor, blankRows, SIZES } from './ui/editor.js';
 import { parseMap, worldToCell } from './sim/map.js';
@@ -17,6 +17,7 @@ import { createScene } from './render/scene.js';
 import { createMapView, disposeMapView } from './render/mapView.js';
 import { createSoldierView } from './render/soldierView.js';
 import { createVisionView } from './render/visionView.js';
+import { createBackdrop } from './render/backdrop.js';
 import { createPlanView } from './render/planView.js';
 import { createFxView } from './render/fxView.js';
 import { createCameraRig } from './render/cameraRig.js';
@@ -30,6 +31,7 @@ import { startLoop } from './loop.js';
 import { createAudio } from './render/audio.js';
 import { exportReplay, validateReplay, fastForward, replayMapDef } from './game/replay.js';
 import { hashWorld } from './sim/world.js';
+import { matchStats, mvp } from './game/stats.js';
 import { createSession, shouldAdopt, EMOTES } from './net/session.js';
 import { createTrysteroTransport, randomRoomCode } from './net/trystero.js';
 
@@ -71,6 +73,8 @@ const labels = createLabels(document.getElementById('ui'));
 let viewW = 1;
 let viewH = 1;
 let rig = null;
+/** Menu scenery while no match or editor is open. */
+let backdrop = null;
 
 const ui = {
   paused: false,
@@ -572,7 +576,9 @@ function onPhase() {
     g.planning.begin(match.planningTeam, match.drafts[match.planningTeam], () => match.world.soldiers);
     g.planDeadline = ui.planTimer && g.mode !== 'replay' ? performance.now() + ui.planTimer * 1000 : null;
     if (g.mode === 'hotseat') frameTeam(match.planningTeam);
+    if (g.mode !== 'aiVsAi') hud.banner(`TURN ${match.turn}`, 'PLAN');
   } else if (match.phase === 'simulating') {
+    hud.banner(`TURN ${match.turn}`, 'EXECUTE', 'exec');
     const notes = { ...match.aiNotes.A, ...match.aiNotes.B };
     g.recorder.startTurn(match.turn, match.drafts, notes);
     const frame = frames().length - 1;
@@ -583,6 +589,31 @@ function onPhase() {
     ui.paused = false;
     rig.userMoved = false;
   }
+}
+
+/** Scoreboard for the game-over card, per team, from the whole recording. */
+function overStats() {
+  const stats = matchStats(frames());
+  const star = mvp(stats);
+  const teams = ['A', 'B'].map((team) => ({
+    team,
+    name: TEAM_NAMES[team],
+    rows: g.match.world.soldiers
+      .filter((s) => s.team === team)
+      .map((s) => {
+        const st = stats.get(s.id);
+        return {
+          label: g.match.labels[s.id],
+          role: ROLES[s.role]?.label ?? s.role,
+          kills: st.kills,
+          damage: st.damage,
+          acc: st.shots ? `${Math.round((100 * st.hits) / st.shots)}%` : '–',
+          alive: st.alive,
+          mvp: s.id === star,
+        };
+      }),
+  }));
+  return { teams };
 }
 
 /** Advance playback by one frame, simulating if we are at the live edge. */
@@ -1260,7 +1291,8 @@ function updateHud() {
   } else if (match.phase === 'handoff') {
     hud.overlay(overlays.handoff(TEAM_NAMES[match.planningTeam]));
   } else if (match.phase === 'over' && live && !g.overShown) {
-    hud.overlay(overlays.over(status));
+    g.overStats ??= overStats();
+    hud.overlay(overlays.over(status, g.overStats));
   } else hud.overlay(null);
 
   if (editing()) {
@@ -1475,6 +1507,11 @@ startLoop({
     keepConnected(now);
     marker.update(dt);
     labels.begin();
+    // Main menu: a living map behind the menu card.
+    if ((ed || g) && backdrop) {
+      backdrop.dispose();
+      backdrop = null;
+    }
     if (ed) {
       buildEditorView();
       keyboard.update(rig, dt);
@@ -1513,6 +1550,10 @@ startLoop({
       g.fx.update(dt);
       drawPlans();
       updateHud();
+    }
+    else {
+      backdrop ??= createBackdrop(view, MAPS[MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)]]);
+      backdrop.update(dt);
     }
     labels.end();
     view.render();

@@ -27,7 +27,7 @@ async (page) => {
   if (phase !== 'over') fail('match did not finish in time');
   await page.waitForTimeout(300);
   const card = await page.locator('#overlay .card h2').innerText();
-  if (!/wins|Draw/.test(card)) fail(`unexpected game over text "${card}"`);
+  if (!/wins|draw/i.test(card)) fail(`unexpected game over text "${card}"`);
   const log = await page.locator('#log').innerText();
   if (!/down/.test(log)) fail('log shows no kills');
   // Sound: someone heard footsteps, a door or gunfire (logged only when the source was out of sight, which varies by match).

@@ -45,6 +45,7 @@ export function createHud(root, onAction) {
       <div class="buttons"></div>
     </div>
     <div id="hint"></div>
+    <div id="banner" hidden></div>
     <div id="log"></div>
     <div id="bottom">
       <div class="panel"></div>
@@ -62,7 +63,9 @@ export function createHud(root, onAction) {
     timeline: $('#bottom .timeline'),
     bar: $('#bottom .bar'),
     overlay: $('#overlay'),
+    banner: $('#banner'),
   };
+  let bannerTimer = 0;
   const keys = {};
   const set = (name, key, html) => {
     if (keys[name] === key) return;
@@ -92,7 +95,25 @@ export function createHud(root, onAction) {
 
     hint(text) {
       els.hint.hidden = !text;
-      if (els.hint.textContent !== text) els.hint.textContent = text;
+      if (els.hint.textContent !== text) {
+        els.hint.textContent = text;
+        // Re-trigger the pop-in animation for each new message.
+        els.hint.classList.remove('pop');
+        void els.hint.offsetWidth;
+        els.hint.classList.add('pop');
+      }
+    },
+
+    /** Big centred title that sweeps in and fades out, e.g. "TURN 3 · EXECUTE". */
+    banner(title, sub = '', cls = '') {
+      els.banner.innerHTML = `<b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`;
+      els.banner.className = cls;
+      els.banner.hidden = false;
+      els.banner.classList.remove('show');
+      void els.banner.offsetWidth;
+      els.banner.classList.add('show');
+      clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => (els.banner.hidden = true), 1500);
     },
 
     /**
@@ -297,18 +318,42 @@ const ROLE_HELP = [
   .map((l) => `<div>${esc(l)}</div>`)
   .join('');
 
+/** Crosshair mark for the title. */
+const LOGO = `<svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+  <circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" stroke-width="4"/>
+  <circle cx="32" cy="32" r="4" fill="currentColor"/>
+  <path d="M32 2v16M32 46v16M2 32h16M46 32h16" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+</svg>`;
+
+const statsTable = ({ teams }) => `
+  <div class="stats">${teams
+    .map(
+      (t) => `<table class="team-${t.team}">
+        <thead><tr><th>${esc(t.name)}</th><th title="Kills">K</th><th title="Damage dealt">DMG</th><th title="Hit rate">ACC</th></tr></thead>
+        <tbody>${t.rows
+          .map(
+            (r) =>
+              `<tr class="${r.alive ? '' : 'dead'}"><td>${r.mvp ? '<i>★</i>' : ''}${esc(r.label)} <small>${esc(r.role)}</small></td><td>${r.kills}</td><td>${Math.round(r.damage)}</td><td>${r.acc}</td></tr>`,
+          )
+          .join('')}</tbody>
+      </table>`,
+    )
+    .join('')}</div>`;
+
 export const overlays = {
   menu: () => `
-    <div class="card">
-      <h1>TACTICAL</h1>
-      <p>Plan your squad. Confirm. Watch 5 seconds unfold.</p>
-      ${btn('start', '⚔ Play vs AI', { arg: 'vsAI', cls: 'go' })}
-      ${btn('start', '👁 Watch AI vs AI', { arg: 'aiVsAi' })}
-      ${btn('start', '👥 Hotseat (2 players, 1 device)', { arg: 'hotseat' })}
-      ${btn('onlineMenu', '🌐 Online (2 players)')}
-      ${btn('loadReplay', '📂 Load replay')}
-      ${btn('editor', '🛠 Map editor')}
-      ${btn('howTo', '❓ How to play')}
+    <div class="card menu">
+      <div class="logo">${LOGO}<h1>TACTICAL</h1></div>
+      <p class="tagline">Plan your squad. Commit. Watch 5 seconds unfold.</p>
+      ${btn('start', '⚔ Play vs AI', { arg: 'vsAI', cls: 'go big' })}
+      <div class="grid2">
+        ${btn('start', '👥 Hotseat<small>2 players · 1 device</small>', { arg: 'hotseat' })}
+        ${btn('onlineMenu', '🌐 Online<small>2 players</small>')}
+        ${btn('start', '👁 Watch AI vs AI', { arg: 'aiVsAi' })}
+        ${btn('editor', '🛠 Map editor')}
+        ${btn('loadReplay', '📂 Load replay')}
+        ${btn('howTo', '❓ How to play')}
+      </div>
       <p class="small">Tap a soldier, tap the map to add waypoints, hold to add a running one.
       Tap a waypoint to edit it, drag it to move it. Pinch / twist / drag to move the camera.</p>
     </div>`,
@@ -419,9 +464,13 @@ export const overlays = {
       <p>Pass the device. The other player shouldn't look!</p>
       ${btn('acceptHandoff', 'Start planning', { cls: 'go' })}
     </div>`,
-  over: (title) => `
-    <div class="card">
-      <h2>${esc(title)}</h2>
+  /**
+   * @param stats null, or { teams: [{ team, name, rows: [{ label, role, kills, damage, acc, alive, mvp }] }] }
+   */
+  over: (title, stats = null) => `
+    <div class="card over">
+      <h2 class="result">${esc(title)}</h2>
+      ${stats ? statsTable(stats) : ''}
       ${btn('rewatch', '⏮ Rewatch match', { cls: 'go' })}
       ${btn('saveReplay', '💾 Save replay')}
       ${btn('menu', 'Main menu')}

@@ -275,3 +275,118 @@ button.danger { color: #ff7a6b; }
   background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
 }
 .flashbang { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 5; }
+
+/* ---------------------------------------------------------------- look & motion */
+button {
+  transition: transform 0.08s ease-out, background-color 0.15s, border-color 0.15s, filter 0.15s;
+}
+button:active { transform: scale(0.96); }
+@media (hover: hover) {
+  button:hover:not(:disabled) { filter: brightness(1.18); }
+}
+button.go {
+  background: linear-gradient(180deg, #3fd383, #27a862);
+  box-shadow: 0 4px 14px rgba(47, 191, 113, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+#overlay {
+  background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.7));
+  animation: fadeIn 0.25s ease-out;
+}
+.card {
+  background: rgba(20, 24, 30, 0.78);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  animation: cardIn 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.card > button,
+.card .grid2 > button {
+  animation: riseIn 0.35s ease-out both;
+}
+.card > :nth-child(3) { animation-delay: 0.05s; }
+.card > :nth-child(4) { animation-delay: 0.1s; }
+.card > :nth-child(5) { animation-delay: 0.15s; }
+.card > :nth-child(6) { animation-delay: 0.2s; }
+.card .grid2 > :nth-child(n) { animation-delay: calc(0.12s + 0.04s * var(--i, 0)); }
+.card .grid2 > :nth-child(2) { --i: 1; }
+.card .grid2 > :nth-child(3) { --i: 2; }
+.card .grid2 > :nth-child(4) { --i: 3; }
+.card .grid2 > :nth-child(5) { --i: 4; }
+.card .grid2 > :nth-child(6) { --i: 5; }
+@keyframes fadeIn { from { opacity: 0; } }
+@keyframes cardIn { from { opacity: 0; transform: translateY(18px) scale(0.97); } }
+@keyframes riseIn { from { opacity: 0; transform: translateY(8px); } }
+
+/* Main menu */
+.card.menu { width: min(460px, calc(100vw - 32px)); gap: 12px; }
+.menu .logo { display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--accent); }
+.menu .logo .mark { width: 40px; height: 40px; animation: spinSlow 14s linear infinite; filter: drop-shadow(0 0 8px rgba(255, 211, 77, 0.45)); }
+.menu h1 {
+  font-size: clamp(30px, 9vw, 44px);
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  margin-right: -0.22em;
+  background: linear-gradient(180deg, #fff 30%, #c9ced6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.menu .tagline { font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
+.menu button.big { min-height: 60px; font-size: 19px; }
+.menu .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.menu .grid2 button { white-space: normal; min-height: 56px; font-size: 14.5px; line-height: 1.2; padding: 6px 8px; }
+@keyframes spinSlow { to { transform: rotate(360deg); } }
+
+/* Turn banner: sweeps in, holds, fades. */
+#banner {
+  position: absolute;
+  top: 34%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  padding: 10px 0;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.45) 25%, rgba(0, 0, 0, 0.45) 75%, transparent);
+}
+#banner[hidden] { display: none; }
+#banner b { font-size: 34px; font-weight: 800; letter-spacing: 0.25em; margin-right: -0.25em; }
+#banner span { font-size: 14px; font-weight: 700; letter-spacing: 0.5em; margin-right: -0.5em; color: var(--accent); }
+#banner.exec span { color: #ff7a6b; }
+#banner.show { animation: bannerIn 1.5s ease-in-out both; }
+@keyframes bannerIn {
+  0% { opacity: 0; transform: translateX(-12%); }
+  18% { opacity: 1; transform: none; }
+  75% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateX(8%); }
+}
+
+#hint.pop { animation: pop 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.4); }
+@keyframes pop { from { opacity: 0; transform: translateX(-50%) scale(0.85); } }
+
+/* Game over */
+.card.over .result { font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; }
+.stats { display: flex; flex-direction: column; gap: 8px; }
+.stats table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: right; }
+.stats th, .stats td { padding: 4px 6px; }
+.stats th:first-child, .stats td:first-child { text-align: left; }
+.stats thead th { font-size: 11px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+.stats table.team-A thead th:first-child { color: var(--blue); }
+.stats table.team-B thead th:first-child { color: var(--red); }
+.stats td small { color: var(--muted); }
+.stats tr.dead td { opacity: 0.5; }
+.stats td i { font-style: normal; color: var(--accent); margin-right: 4px; }
+.stats tbody tr { animation: riseIn 0.3s ease-out both; }
+.stats tbody tr:nth-child(2) { animation-delay: 0.05s; }
+.stats tbody tr:nth-child(3) { animation-delay: 0.1s; }
+.stats tbody tr:nth-child(4) { animation-delay: 0.15s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0s !important; }
+}
+#hint:empty { display: none; }
+.menu .grid2 button small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
