@@ -92,5 +92,49 @@ describe('planning', () => {
     p.startPick('faceHere');
     expect(p.state.pickMode).toBeNull();
   });
-});
 
+  it('gives orders where the soldier stands, before a planned move, without placing a waypoint', () => {
+    const { p, drafts } = setup();
+    const c = cellCenter(map, 3, 1);
+    p.addWaypoint(c.x, c.z);
+    p.deselectWaypoint();
+    // Throw first: a "here" waypoint goes in front of the move, holding the grenade.
+    expect(p.selectHere()).toBe(true);
+    p.startPick('grenade:frag');
+    expect(p.applyPick(a.x + 4, a.z)).toBe(true);
+    expect(drafts[1]).toHaveLength(2);
+    expect(drafts[1][0]).toMatchObject({ x: a.x, z: a.z, actions: [{ type: 'grenade', kind: 'frag' }] });
+    expect(p.isHere(0)).toBe(true);
+    expect(p.isHere(1)).toBe(false);
+    // More orders reuse it; one undo per order.
+    p.deselectWaypoint();
+    p.selectHere();
+    p.addAction({ type: 'stance', stance: 'crouch' });
+    expect(drafts[1]).toHaveLength(2);
+    expect(drafts[1][0].actions).toHaveLength(2);
+    p.undo();
+    expect(drafts[1][0].actions).toHaveLength(1);
+    p.undo();
+    expect(drafts[1]).toHaveLength(1);
+    expect(drafts[1][0]).toMatchObject({ x: c.x, z: c.z });
+  });
+
+  it('drops a fresh "here" waypoint when its order is cancelled', () => {
+    const { p, drafts } = setup();
+    const c = cellCenter(map, 3, 1);
+    p.addWaypoint(c.x, c.z);
+    const undos = p.state.undoStack.length;
+    p.selectHere();
+    p.startPick('grenade:smoke');
+    p.cancelPick();
+    expect(drafts[1]).toHaveLength(1);
+    expect(p.state.undoStack).toHaveLength(undos);
+    expect(p.state.wpIndex).toBeNull();
+    // Tapping a waypoint handle meanwhile still selects the waypoint that was tapped.
+    p.selectHere();
+    p.startPick('grenade:smoke');
+    p.selectWaypoint(1, 1);
+    expect(drafts[1]).toHaveLength(1);
+    expect(p.selectedWaypoint).toMatchObject({ x: c.x, z: c.z });
+  });
+});

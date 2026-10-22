@@ -914,6 +914,11 @@ window.addEventListener('keydown', (e) => {
 
 function onAction(action, arg) {
   const P = g?.planning;
+  // Orders from the soldier panel are given where the soldier stands, before any move.
+  if (action.startsWith('here:')) {
+    if (!P?.selectHere()) return;
+    action = action.slice(5);
+  }
   switch (action) {
     case 'start':
       ui.pendingMode = arg;
@@ -1324,6 +1329,7 @@ function updateHud() {
         label: match.labels[s.id],
         index: P.state.wpIndex,
         count: P.state.drafts[s.id].length,
+        here: P.isHere(),
         booms: (mark?.booms ?? []).map((b, k) => {
           const gr = est?.grenades?.filter((x) => x.wpIndex === P.state.wpIndex)[k];
           return {
@@ -1349,6 +1355,7 @@ function updateHud() {
         weapon: `${WEAPONS[s.weapon].label} ${s.ammo}/${WEAPONS[s.weapon].mag}`,
         hp: Math.max(0, Math.round(s.hp)),
         gear: s.gear,
+        charges: s.charges,
         wps: P.state.drafts[s.id]?.length ?? 0,
         pickMode: P.state.pickMode,
         canFaceHere: P.canFaceHere,
@@ -1366,7 +1373,7 @@ function updateHud() {
       : net?.opponentReady
         ? 'Opponent is ready'
       : s && !(P.state.drafts[s.id]?.length)
-        ? 'Tap map: walk here · hold: run'
+        ? 'Tap map: walk here · hold: run · or give orders below'
         : '';
     hud.hint(hint);
   } else {

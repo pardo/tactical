@@ -237,6 +237,7 @@ export function createHud(root, onAction) {
           JSON.stringify(model),
           `<div class="row info">${esc(model.label)} · ${esc(model.weapon)} · HP ${model.hp} · ${gearText(model.gear)} · ${model.wps} waypoint${model.wps === 1 ? '' : 's'}</div>
            <div class="row">${btn('clearPlan', '🗑 Clear plan', { disabled: !model.wps })}${btn('holdHere', '▼ Hold here (crouch)')}${!model.canFaceHere ? '' : btn('pick', '➜ Face…', { arg: 'faceHere', cls: model.pickMode === 'faceHere' ? 'on' : '', title: tip('faceHere') })}</div>
+           <div class="row tools"><span class="lbl">Now:</span>${thenTools(model, 'here:', !model.canFaceHere)}</div>
            ${model.explain ? `<div class="row explain">${esc(model.explain)}</div>` : ''}`,
         );
       }
@@ -255,7 +256,7 @@ export function createHud(root, onAction) {
       set(
         'panel',
         JSON.stringify(model),
-        `<div class="row info">${esc(model.label)} · waypoint ${model.index + 1}/${model.count} · arrive ${model.eta}${(model.booms ?? [])
+        `<div class="row info">${esc(model.label)} · ${model.here ? 'here, before moving' : `waypoint ${model.index + 1}/${model.count} · arrive ${model.eta}`}${(model.booms ?? [])
           .map(
             (b) =>
               ` · ${b.icon} goes off ${Number.isFinite(b.at) ? `${b.at.toFixed(1)}s` : 'later'}${b.late ? ' <b class="warn">⏭ next turn</b>' : ''}` +
@@ -271,17 +272,7 @@ export function createHud(root, onAction) {
          </div>
          <div class="row tools">
            <span class="lbl">Then:</span>
-           ${btn('addCover', '🛡 Cover', { title: tip('cover') })}
-           ${btn('addStance', '▼ Crouch', { arg: 'crouch', title: tip('stance:crouch') })}${btn('addStance', '▲ Stand', { arg: 'stand', title: tip('stance:stand') })}
-           ${btn('pick', '➜ Face…', { arg: 'face', cls: model.pickMode === 'face' ? 'on' : '', title: tip('face') })}
-           ${btn('addWait', '⏱ +1s', { title: tip('wait') })}
-           ${btn('addSync', '⏲ Sync', { title: tip('until') })}
-           ${btn('addCode', '⏸ Go code', { title: tip('code') })}
-           ${model.charges > 0 ? btn('pick', `🧨 Breach ×${model.charges}…`, { arg: 'breach', cls: model.pickMode === 'breach' ? 'on' : '', title: tip('breach') }) : ''}
-           ${['frag', 'flash', 'smoke']
-             .filter((k) => model.gear[k] > 0)
-             .map((k) => btn('pick', `${GRENADE_ICON[k]} ${GRENADE_NAME[k]} ×${model.gear[k]}…`, { arg: `grenade:${k}`, cls: model.pickMode === `grenade:${k}` ? 'on' : '', title: tip(`grenade:${k}`) }))
-             .join('')}
+           ${thenTools(model)}
          </div>
          ${actions || w.look ? `<div class="row actions"><span class="lbl">Queued:</span>${w.look ? btn('clearLook', '👁 Look ✕', { cls: 'action' }) : ''}${actions}</div>` : ''}
          <div class="row explain">${esc(model.explain ?? `📋 ${model.summary}`)}</div>`,
@@ -296,6 +287,29 @@ export function createHud(root, onAction) {
       }
     },
   };
+}
+
+/**
+ * Order buttons run on arrival at a waypoint. With prefix 'here:' (soldier panel) they're
+ * given where the soldier stands instead; there Face… is left to the turn-in-place button unless `face`.
+ */
+function thenTools(model, prefix = '', face = true) {
+  const pickBtn = (arg, label) =>
+    btn(`${prefix}pick`, label, { arg, cls: model.pickMode === arg ? 'on' : '', title: tip(arg) });
+  return (
+    btn(`${prefix}addCover`, '🛡 Cover', { title: tip('cover') }) +
+    btn(`${prefix}addStance`, '▼ Crouch', { arg: 'crouch', title: tip('stance:crouch') }) +
+    btn(`${prefix}addStance`, '▲ Stand', { arg: 'stand', title: tip('stance:stand') }) +
+    (face ? pickBtn('face', '➜ Face…') : '') +
+    btn(`${prefix}addWait`, '⏱ +1s', { title: tip('wait') }) +
+    btn(`${prefix}addSync`, '⏲ Sync', { title: tip('until') }) +
+    btn(`${prefix}addCode`, '⏸ Go code', { title: tip('code') }) +
+    (model.charges > 0 ? pickBtn('breach', `🧨 Breach ×${model.charges}…`) : '') +
+    ['frag', 'flash', 'smoke']
+      .filter((k) => model.gear[k] > 0)
+      .map((k) => pickBtn(`grenade:${k}`, `${GRENADE_ICON[k]} ${GRENADE_NAME[k]} ×${model.gear[k]}…`))
+      .join('')
+  );
 }
 
 const HELP_KEYS = {
