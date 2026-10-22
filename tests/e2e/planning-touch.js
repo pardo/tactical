@@ -121,7 +121,10 @@ async (page) => {
   await page.getByRole('button', { name: 'GO ▶' }).tap();
   await page.waitForTimeout(200);
   if ((await st()).phase !== 'simulating') fail('GO did not start the turn');
-  await page.waitForTimeout(5600);
+  // A 5 s turn; the software renderer can run it slower than real time.
+  await page
+    .waitForFunction(() => ['planning', 'over'].includes(window.__tactical.game.match.phase), null, { timeout: 30000 })
+    .catch(() => {});
   s = await st();
   if (s.phase !== 'planning' && s.phase !== 'over') fail(`expected next planning phase, got ${s.phase}`);
   return `ok: waypoint moved ${moved.toFixed(2)} m by drag, turn 2 reached`;

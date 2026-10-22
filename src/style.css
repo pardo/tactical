@@ -274,3 +274,4 @@ button.danger { color: #ff7a6b; }
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
 }
+.flashbang { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 5; }

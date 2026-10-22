@@ -38,6 +38,7 @@ export function createCameraRig(camera, { bounds = 20, distance = 26, focus = { 
   /** Glide target (partial camera state) and its speed, or null. */
   let goal = null;
   let goalRate = GLIDE_RATE;
+  let shakeAmt = 0;
   const rig = { userMoved: false };
 
   function clampState(o) {
@@ -52,6 +53,12 @@ export function createCameraRig(camera, { bounds = 20, distance = 26, focus = { 
     const h = s.distance * Math.cos(s.pitch);
     camera.position.set(s.x + Math.sin(s.yaw) * h, s.distance * Math.sin(s.pitch), s.z + Math.cos(s.yaw) * h);
     camera.lookAt(s.x, 0, s.z);
+    if (shakeAmt > 0) {
+      const k = shakeAmt * shakeAmt * 0.35;
+      camera.position.x += (Math.random() - 0.5) * k;
+      camera.position.y += (Math.random() - 0.5) * k;
+      camera.position.z += (Math.random() - 0.5) * k;
+    }
     camera.updateMatrixWorld();
   }
 
@@ -150,6 +157,10 @@ export function createCameraRig(camera, { bounds = 20, distance = 26, focus = { 
 
   /** Advance a glide; call once per rendered frame. */
   function update(dt) {
+    if (shakeAmt > 0) {
+      shakeAmt = Math.max(0, shakeAmt - dt * 2.5);
+      if (!goal) apply();
+    }
     if (!goal) return;
     const k = 1 - Math.exp(-goalRate * Math.min(dt, 0.1));
     let done = true;
@@ -165,6 +176,11 @@ export function createCameraRig(camera, { bounds = 20, distance = 26, focus = { 
     }
     if (done) goal = null;
     apply();
+  }
+
+  /** Camera shake (0..1), e.g. a nearby explosion; decays over ~0.4 s. */
+  function shake(amount) {
+    shakeAmt = Math.max(shakeAmt, Math.min(1, amount));
   }
 
   /** Centre the view on a ground point, keeping zoom and rotation. */
@@ -200,6 +216,7 @@ export function createCameraRig(camera, { bounds = 20, distance = 26, focus = { 
     glideTo,
     update,
     setHome,
+    shake,
     gliding: () => goal !== null,
   });
 }

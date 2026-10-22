@@ -38,10 +38,10 @@ vision cones, cameras, menu and animations. Gameplay and determinism must not ch
 - [x] Selection ring pulse, contact shadow blob under each soldier
 
 ## Phase 5 — FX
-- [ ] Muzzle flash with short point light; glowing tracers; shell casings
-- [ ] Bullet impacts: sparks on walls, dust on cover; hit flash on soldiers
-- [ ] Explosions: fireball + shockwave ring + debris + scorch decal; smoke as soft billboard particles
-- [ ] Flashbang: white bloom; screen shake on nearby blasts
+- [x] Muzzle flash with short point light; glowing tracers; shell casings
+- [x] Bullet impacts: sparks on walls, dust on cover; hit flash on soldiers
+- [x] Explosions: fireball + shockwave ring + debris + scorch decal; smoke as soft billboard particles
+- [x] Flashbang: white bloom; screen shake on nearby blasts
 
 ## Phase 6 — Menu & UI animation
 - [ ] Main menu over a live animated 3D backdrop (slow orbit around a map with AI soldiers)

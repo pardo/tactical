@@ -377,7 +377,7 @@ function startMatch(mode, opts = {}) {
     soldiers: createSoldierView(view.scene, match.labels),
     vision: createVisionView(view.scene, map),
     plans: createPlanView(view.scene),
-    fx: createFxView(view.scene, map),
+    fx: createFxView(view.scene, map, { onShake: blastShake, onFlash: blastFlash }),
     planning: createPlanning(map),
     planDeadline: null,
     cursor: 0,
@@ -455,7 +455,7 @@ function endMatch() {
   g.soldiers.dispose();
   g.vision.dispose();
   g.plans.hide();
-  g.fx.clear();
+  g.fx.dispose();
   g.predictor?.dispose();
   g = null;
 }
@@ -501,6 +501,27 @@ function teamView(match, team) {
   if (portrait && fx) z = THREE.MathUtils.clamp(z, -slack, slack);
   else if (portrait) x = THREE.MathUtils.clamp(x, -slack, slack);
   return { x, z, yaw: Math.atan2(-fx, -fz), distance };
+}
+
+/** How much a blast at (x, z) affects the view: 1 at the centre of the screen, 0 far off it. */
+function blastNearness(x, z) {
+  const r = rig.state;
+  return Math.max(0, 1 - Math.hypot(x - r.x, z - r.z) / Math.max(8, r.distance * 0.6));
+}
+const blastShake = (strength, x, z) => !ui.paused && rig.shake(strength * blastNearness(x, z));
+const flashEl = document.createElement('div');
+flashEl.className = 'flashbang';
+document.body.appendChild(flashEl);
+/** Flashbang going off near the middle of the screen: brief white-out. */
+function blastFlash(strength, x, z) {
+  const k = strength * blastNearness(x, z);
+  if (k <= 0.05) return;
+  flashEl.style.transition = 'none';
+  flashEl.style.opacity = String(0.85 * k);
+  requestAnimationFrame(() => {
+    flashEl.style.transition = 'opacity 0.9s ease-out';
+    flashEl.style.opacity = '0';
+  });
 }
 
 /** Point the camera at a team's living soldiers, facing the enemy side. */
