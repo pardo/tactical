@@ -3,6 +3,8 @@
 A simultaneous-turn tactical squad shooter for the browser (think Door Kickers × Frozen Synapse),
 built touch-first for phones.
 
+**▶ Play it in your browser: https://pardo.github.io/tactical/**
+
 Both players plan their 4-soldier squads, press **GO**, and the plans play out at the same time
 for 5 seconds. Soldiers act on their own within your orders: they spot, react, aim, shoot, take
 cover and turn toward threats, so *how* you move (holding an angle vs. running in) decides fights.
