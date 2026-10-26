@@ -99,7 +99,7 @@ export function createVisionView(scene, map) {
   const clock = new THREE.Clock();
 
   const fog = new THREE.Mesh(
-    new THREE.PlaneGeometry(map.width + 0.02, map.height + 0.02),
+    new THREE.PlaneGeometry(map.sizeX + 0.02, map.sizeZ + 0.02),
     new THREE.MeshBasicMaterial({
       color: 0x05070a,
       transparent: true,

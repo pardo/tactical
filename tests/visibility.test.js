@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { parseMap } from '../src/sim/map.js';
+import { thick } from './helpers.js';
 import { sightBlocker, castGrid, gridCorners, visionPolygon } from '../src/render/visibility.js';
 
 // 9×5 room: wall column at cx=4 with a door at row 2.
-const map = parseMap({
+const map = parseMap(thick({
   name: 't',
   rows: ['#########', '#...#...#', '#...D...#', '#...#...#', '#########'],
-});
+}));
 
 describe('visibility', () => {
   it('walls stop rays; open doors let them through', () => {

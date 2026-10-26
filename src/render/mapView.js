@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { Tile, cellCenter } from '../sim/map.js';
-import { doorAxis } from '../sim/doors.js';
+import { Tile, CELL, TILES_PER_METRE, cellCenter } from '../sim/map.js';
 import {
   themeFor,
   bakeFloor,
@@ -133,11 +132,16 @@ function instancedPart(geometry, material, count) {
   return mesh;
 }
 
-/** Connected runs of low cover, so one run gets one kind of prop and one direction. */
-function coverRuns(map) {
+/**
+ * Low cover as props: connected runs (one prop kind and direction per run), cut into
+ * metre-aligned chunks so a long run of quarter-metre tiles gets one prop per metre.
+ * @returns {{ chunks: { run, cells: number[], x, z, along, across }[], runs: { first, alongX }[] }}
+ */
+function coverChunks(map) {
   const { width, height, tiles } = map;
   const run = new Int32Array(width * height).fill(-1);
   const runs = [];
+  const chunks = [];
   for (let i = 0; i < tiles.length; i++) {
     if (tiles[i] !== Tile.LOW_COVER || run[i] >= 0) continue;
     const cells = [];
@@ -159,13 +163,97 @@ function coverRuns(map) {
     }
     const xs = new Set(cells.map((j) => j % width));
     const zs = new Set(cells.map((j) => (j / width) | 0));
-    runs.push({ first: i, alongX: xs.size >= zs.size });
+    const alongX = xs.size >= zs.size;
+    const r = runs.length;
+    runs.push({ first: i, alongX });
+    const byBlock = new Map();
+    for (const j of cells.sort((p, q) => p - q)) {
+      const key = `${Math.floor((j % width) / TILES_PER_METRE)},${Math.floor(j / width / TILES_PER_METRE)}`;
+      if (!byBlock.has(key)) byBlock.set(key, []);
+      byBlock.get(key).push(j);
+    }
+    for (const list of byBlock.values()) {
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      let z0 = Infinity;
+      let z1 = -Infinity;
+      for (const j of list) {
+        const cx = j % width;
+        const cz = (j / width) | 0;
+        x0 = Math.min(x0, cx);
+        x1 = Math.max(x1, cx);
+        z0 = Math.min(z0, cz);
+        z1 = Math.max(z1, cz);
+      }
+      const a = cellCenter(map, x0, z0);
+      const c = cellCenter(map, x1, z1);
+      const sx = (x1 - x0 + 1) * CELL;
+      const sz = (z1 - z0 + 1) * CELL;
+      chunks.push({ run: r, cells: list, x: (a.x + c.x) / 2, z: (a.z + c.z) / 2, along: alongX ? sx : sz, across: alongX ? sz : sx });
+    }
   }
-  return { run, runs };
+  return { chunks, runs };
 }
 
 /**
- * @param opts { floorPx } texture resolution per cell (the editor rebuilds often and uses less)
+ * Walls as merged boxes (greedy rectangles over wall tiles): sides and caps as two
+ * material groups, UVs in metres so the tiling textures keep their scale.
+ */
+function wallGeometry(map, height) {
+  const { width, tiles } = map;
+  const used = new Uint8Array(tiles.length);
+  const isWall = (cx, cz) => cx < width && cz < map.height && tiles[cz * width + cx] === Tile.WALL && !used[cz * width + cx];
+  const pos = [];
+  const nrm = [];
+  const uv = [];
+  const capPos = [];
+  const capNrm = [];
+  const capUv = [];
+  const quad = (P, N, U, p, n, u) => {
+    // p: 4 corners counter-clockwise seen from outside; two triangles.
+    for (const k of [0, 1, 2, 0, 2, 3]) {
+      P.push(...p[k]);
+      N.push(...n);
+      U.push(...u[k]);
+    }
+  };
+  const hx = -map.sizeX / 2;
+  const hz = -map.sizeZ / 2;
+  for (let cz = 0; cz < map.height; cz++) {
+    for (let cx = 0; cx < width; cx++) {
+      if (!isWall(cx, cz)) continue;
+      let w = 1;
+      while (isWall(cx + w, cz)) w++;
+      let d = 1;
+      grow: for (;;) {
+        for (let x = cx; x < cx + w; x++) if (!isWall(x, cz + d)) break grow;
+        d++;
+      }
+      for (let z = cz; z < cz + d; z++) for (let x = cx; x < cx + w; x++) used[z * width + x] = 1;
+      const x0 = hx + cx * CELL;
+      const x1 = x0 + w * CELL;
+      const z0 = hz + cz * CELL;
+      const z1 = z0 + d * CELL;
+      const y = height;
+      // Sides: u runs along the face in metres, v up the wall.
+      quad(pos, nrm, uv, [[x0, 0, z1], [x1, 0, z1], [x1, y, z1], [x0, y, z1]], [0, 0, 1], [[x0, 0], [x1, 0], [x1, 1], [x0, 1]]);
+      quad(pos, nrm, uv, [[x1, 0, z0], [x0, 0, z0], [x0, y, z0], [x1, y, z0]], [0, 0, -1], [[-x1, 0], [-x0, 0], [-x0, 1], [-x1, 1]]);
+      quad(pos, nrm, uv, [[x1, 0, z1], [x1, 0, z0], [x1, y, z0], [x1, y, z1]], [1, 0, 0], [[-z1, 0], [-z0, 0], [-z0, 1], [-z1, 1]]);
+      quad(pos, nrm, uv, [[x0, 0, z0], [x0, 0, z1], [x0, y, z1], [x0, y, z0]], [-1, 0, 0], [[z0, 0], [z1, 0], [z1, 1], [z0, 1]]);
+      quad(capPos, capNrm, capUv, [[x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0]], [0, 1, 0], [[x0, -z1], [x1, -z1], [x1, -z0], [x0, -z0]]);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([...pos, ...capPos], 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute([...nrm, ...capNrm], 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute([...uv, ...capUv], 2));
+  geo.addGroup(0, pos.length / 3, 0);
+  geo.addGroup(pos.length / 3, capPos.length / 3, 1);
+  return geo;
+}
+
+/**
+ * @param opts { floorPx } floor texture pixels per metre (the editor rebuilds often and uses less)
  */
 export function createMapView(scene, map, objective = null, { floorPx = 32 } = {}) {
   const group = new THREE.Group();
@@ -173,11 +261,6 @@ export function createMapView(scene, map, objective = null, { floorPx = 32 } = {
   const owned = []; // per-view GPU resources to free on dispose (shared prop assets are kept)
   const own = (x) => (owned.push(x), x);
   scene.background = new THREE.Color(theme.sky);
-
-  const byTile = { [Tile.WALL]: [], [Tile.LOW_COVER]: [], [Tile.DOOR]: [] };
-  for (let cz = 0; cz < map.height; cz++) {
-    for (let cx = 0; cx < map.width; cx++) byTile[map.tiles[cz * map.width + cx]]?.push({ cx, cz });
-  }
 
   // Ground beyond the map, fading into the background.
   const groundCanvas = document.createElement('canvas');
@@ -191,7 +274,7 @@ export function createMapView(scene, map, objective = null, { floorPx = 32 } = {
   gg.fillRect(0, 0, 128, 128);
   const groundTex = own(new THREE.CanvasTexture(groundCanvas));
   groundTex.colorSpace = THREE.SRGBColorSpace;
-  const outerSize = Math.max(map.width, map.height) * 3 + 40;
+  const outerSize = Math.max(map.sizeX, map.sizeZ) * 3 + 40;
   const outer = new THREE.Mesh(new THREE.PlaneGeometry(outerSize, outerSize), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1 }));
   outer.rotation.x = -Math.PI / 2;
   outer.position.y = -0.02;
@@ -199,17 +282,17 @@ export function createMapView(scene, map, objective = null, { floorPx = 32 } = {
   group.add(outer);
 
   const floorTex = own(bakeFloor(map, theme, floorPx));
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(map.width, map.height), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(map.sizeX, map.sizeZ), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
 
   // Faint 1 m grid for planning, over the floor art.
   const pts = [];
-  const hw = map.width / 2;
-  const hh = map.height / 2;
-  for (let x = 0; x <= map.width; x++) pts.push(x - hw, 0.005, -hh, x - hw, 0.005, hh);
-  for (let z = 0; z <= map.height; z++) pts.push(-hw, 0.005, z - hh, hw, 0.005, z - hh);
+  const hw = map.sizeX / 2;
+  const hh = map.sizeZ / 2;
+  for (let x = 0; x <= map.sizeX; x++) pts.push(x - hw, 0.005, -hh, x - hw, 0.005, hh);
+  for (let z = 0; z <= map.sizeZ; z++) pts.push(-hw, 0.005, z - hh, hw, 0.005, z - hh);
   const grid = new THREE.LineSegments(
     new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)),
     new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.14, depthWrite: false }),
@@ -220,26 +303,23 @@ export function createMapView(scene, map, objective = null, { floorPx = 32 } = {
   // Walls: textured sides, lighter cap on top.
   const side = new THREE.MeshStandardMaterial({ map: wallTexture(theme), roughness: 0.9 });
   const cap = new THREE.MeshStandardMaterial({ map: capTexture(theme), roughness: 0.8 });
-  const walls = instancedPart(new THREE.BoxGeometry(1, WALL_VIS_HEIGHT, 1), [side, side, cap, side, side, side], byTile[Tile.WALL].length);
-  const m4 = new THREE.Matrix4();
-  byTile[Tile.WALL].forEach(({ cx, cz }, i) => {
-    const c = cellCenter(map, cx, cz);
-    walls.setMatrixAt(i, m4.makeTranslation(c.x, WALL_VIS_HEIGHT / 2, c.z));
-  });
+  const walls = new THREE.Mesh(own(wallGeometry(map, WALL_VIS_HEIGHT)), [side, cap]);
+  walls.castShadow = true;
+  walls.receiveShadow = true;
   group.add(walls);
+  const m4 = new THREE.Matrix4();
 
   // Cover: one prop kind per connected run, chosen from the theme by a hash of the run.
   const P = props();
-  const { run, runs } = coverRuns(map);
-  const coverCells = byTile[Tile.LOW_COVER];
+  const { chunks, runs } = coverChunks(map);
   const kindOf = runs.map((r) => theme.props[hashString(`${map.name}:${r.first}`) % theme.props.length]);
   const rand = rng(hashString(map.name ?? '') + 1);
-  const placed = coverCells.map(({ cx, cz }) => {
-    const r = run[cz * map.width + cx];
-    const kind = kindOf[r];
+  const placed = chunks.map((ch) => {
+    const kind = kindOf[ch.run];
     const jitter = kind === 'crate' || kind === 'barrels' || kind === 'planter' ? (rand() - 0.5) * 0.35 : 0;
-    const yaw = (runs[r].alongX ? 0 : Math.PI / 2) + jitter + (kind === 'sofa' && rand() < 0.5 ? Math.PI : 0);
-    return { cx, cz, kind, yaw, scale: 0.94 + rand() * 0.1 };
+    const yaw = (runs[ch.run].alongX ? 0 : Math.PI / 2) + jitter + (kind === 'sofa' && rand() < 0.5 ? Math.PI : 0);
+    // Props are modelled for a 1 m tile: stretched to the chunk's footprint.
+    return { ...ch, kind, yaw, scale: 0.94 + rand() * 0.1 };
   });
   const propMeshes = {};
   const slot = []; // cover index → index within its kind
@@ -249,7 +329,7 @@ export function createMapView(scene, map, objective = null, { floorPx = 32 } = {
     propMeshes[kind] = P[kind].map(([geo, mat]) => instancedPart(geo, mat, counts[kind]));
     group.add(...propMeshes[kind]);
   }
-  const rubble = P.rubble.map(([geo, mat]) => instancedPart(geo, mat, coverCells.length));
+  const rubble = P.rubble.map(([geo, mat]) => instancedPart(geo, mat, placed.length));
   group.add(...rubble);
   const q = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
@@ -257,13 +337,16 @@ export function createMapView(scene, map, objective = null, { floorPx = 32 } = {
   const scl = new THREE.Vector3();
   function placeCover(gone) {
     placed.forEach((p, i) => {
-      const c = cellCenter(map, p.cx, p.cz);
-      pos.set(c.x, 0, c.z);
+      // A chunk counts as blown away once most of its tiles are.
+      const lost = p.cells.filter((j) => gone.has(j)).length * 2 >= p.cells.length;
+      pos.set(p.x, 0, p.z);
       q.setFromAxisAngle(up, p.yaw);
-      scl.setScalar(gone.has(p.cz * map.width + p.cx) ? 0 : p.scale);
+      if (lost) scl.setScalar(0);
+      else scl.set(p.scale * p.along, p.scale, p.scale * p.across);
       m4.compose(pos, q, scl);
       for (const mesh of propMeshes[p.kind]) mesh.setMatrixAt(slot[i], m4);
-      scl.setScalar(gone.has(p.cz * map.width + p.cx) ? 1 : 0);
+      if (lost) scl.set(p.along, 1, p.across);
+      else scl.setScalar(0);
       m4.compose(pos, q, scl);
       for (const mesh of rubble) mesh.setMatrixAt(i, m4);
     });
@@ -275,9 +358,9 @@ export function createMapView(scene, map, objective = null, { floorPx = 32 } = {
   // and splinters left on the floor once breached.
   const doorMat = new THREE.MeshStandardMaterial({ map: doorTexture(theme), roughness: 0.8 });
   const jambMat = new THREE.MeshStandardMaterial({ color: theme.trim, roughness: 0.7 });
-  const leafGeo = new THREE.BoxGeometry(0.92, DOOR_H, 0.08);
-  leafGeo.translate(0.46, DOOR_H / 2, 0); // hinge at the local origin
-  const jambGeo = new THREE.BoxGeometry(0.08, DOOR_H + 0.02, 1.02);
+  const leafGeo = new THREE.BoxGeometry(1, DOOR_H, 0.08);
+  leafGeo.translate(0.5, DOOR_H / 2, 0); // hinge at the local origin; scaled to the opening
+  const jambGeo = new THREE.BoxGeometry(0.08, DOOR_H + 0.02, 1);
   const splinterGeo = assemble([
     [new THREE.BoxGeometry(0.5, 0.03, 0.1), -0.1, 0.02, 0.2, 0.5],
     [new THREE.BoxGeometry(0.35, 0.03, 0.12), 0.2, 0.02, -0.1, -0.8],
@@ -287,33 +370,31 @@ export function createMapView(scene, map, objective = null, { floorPx = 32 } = {
   own(jambGeo);
   own(splinterGeo);
   const doors = [];
-  for (let cz = 0; cz < map.height; cz++) {
-    for (let cx = 0; cx < map.width; cx++) {
-      if (map.tiles[cz * map.width + cx] !== Tile.DOOR) continue;
-      const alongX = doorAxis(map, cx, cz) === 'x';
-      const c = cellCenter(map, cx, cz);
-      const root = new THREE.Group();
-      root.position.set(c.x, 0, c.z);
-      root.rotation.y = alongX ? 0 : Math.PI / 2;
-      const hinge = new THREE.Group();
-      hinge.position.x = -0.46;
-      const leaf = new THREE.Mesh(leafGeo, doorMat);
-      leaf.castShadow = true;
-      hinge.add(leaf);
-      const jambs = [-0.5, 0.5].map((x) => {
-        const j = new THREE.Mesh(jambGeo, jambMat);
-        j.position.set(x, (DOOR_H + 0.02) / 2, 0);
-        j.scale.z = 0.3;
-        j.castShadow = true;
-        return j;
-      });
-      const splinters = new THREE.Mesh(splinterGeo, doorMat);
-      splinters.visible = false;
-      root.add(hinge, ...jambs, splinters);
-      group.add(root);
-      // Swing away from the nearer map half, so doors open "into" rooms consistently.
-      doors.push({ hinge, leaf, splinters, angle: 0, dir: (alongX ? c.z : -c.x) >= 0 ? -1 : 1 });
-    }
+  for (const d of map.doors) {
+    const alongX = d.axis === 'x';
+    const root = new THREE.Group();
+    root.position.set(d.x, 0, d.z);
+    root.rotation.y = alongX ? 0 : Math.PI / 2;
+    const leafW = d.width - 0.08;
+    const hinge = new THREE.Group();
+    hinge.position.x = -leafW / 2;
+    const leaf = new THREE.Mesh(leafGeo, doorMat);
+    leaf.scale.x = leafW;
+    leaf.castShadow = true;
+    hinge.add(leaf);
+    const jambs = [-d.width / 2, d.width / 2].map((x) => {
+      const j = new THREE.Mesh(jambGeo, jambMat);
+      j.position.set(x, (DOOR_H + 0.02) / 2, 0);
+      j.scale.z = Math.min(d.depth, 0.3);
+      j.castShadow = true;
+      return j;
+    });
+    const splinters = new THREE.Mesh(splinterGeo, doorMat);
+    splinters.visible = false;
+    root.add(hinge, ...jambs, splinters);
+    group.add(root);
+    // Swing away from the nearer map half, so doors open "into" rooms consistently.
+    doors.push({ hinge, leaf, splinters, angle: 0, dir: (alongX ? d.z : -d.x) >= 0 ? -1 : 1 });
   }
 
   // Objective zone: translucent disc + ring, tinted by whoever holds it.

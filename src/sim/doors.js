@@ -1,6 +1,6 @@
 import { RAPIER } from './physics.js';
 import { DT } from './constants.js';
-import { Tile, cellCenter, worldToCell, tileAt } from './map.js';
+import { CELL, worldToCell, doorIdAt } from './map.js';
 import { length, headingTo, wrapAngle, PI } from './fmath.js';
 import { hasLineOfSight } from './los.js';
 import { damageSoldier, EYE_HEIGHT } from './soldier/soldier.js';
@@ -14,30 +14,20 @@ const BREACH_STUN_RADIUS = 5;
 const BREACH_KILL_RADIUS = 2.5;
 const BREACH_DAMAGE = 70;
 
-/** Doors run along the wall they sit in: 'x' if the wall continues left/right, else 'z'. */
-export function doorAxis(map, cx, cz) {
-  return tileAt(map, cx - 1, cz) === Tile.WALL || tileAt(map, cx + 1, cz) === Tile.WALL ? 'x' : 'z';
-}
-
-/** One closed door per DOOR tile, in cell order. */
+/** One closed door per door (a connected group of door tiles, see map.js), in map order. */
 export function createDoors(physics, map) {
-  const doors = [];
-  for (let cz = 0; cz < map.height; cz++) {
-    for (let cx = 0; cx < map.width; cx++) {
-      if (tileAt(map, cx, cz) !== Tile.DOOR) continue;
-      const c = cellCenter(map, cx, cz);
-      const collider = physics.createCollider(
-        RAPIER.ColliderDesc.cuboid(0.5, DOOR_HEIGHT / 2, 0.5).setTranslation(c.x, DOOR_HEIGHT / 2, c.z),
-      );
-      doors.push({ id: doors.length, cx, cz, x: c.x, z: c.z, axis: doorAxis(map, cx, cz), state: 'closed', collider });
-    }
-  }
-  return doors;
+  return map.doors.map((d) => {
+    const hx = ((d.x1 - d.x0 + 1) * CELL) / 2;
+    const hz = ((d.z1 - d.z0 + 1) * CELL) / 2;
+    const collider = physics.createCollider(RAPIER.ColliderDesc.cuboid(hx, DOOR_HEIGHT / 2, hz).setTranslation(d.x, DOOR_HEIGHT / 2, d.z));
+    return { id: d.id, x: d.x, z: d.z, axis: d.axis, state: 'closed', collider };
+  });
 }
 
 export function doorAt(world, x, z) {
   const { cx, cz } = worldToCell(world.map, x, z);
-  return world.doors.find((d) => d.cx === cx && d.cz === cz) ?? null;
+  const id = doorIdAt(world.map, cx, cz);
+  return id >= 0 ? world.doors[id] : null;
 }
 
 /** @param by soldier opening it (heard by nearby enemies), or null */

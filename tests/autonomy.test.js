@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initPhysics } from '../src/sim/physics.js';
 import { createWorld, spawnSquads, step } from '../src/sim/world.js';
-import { parseMap, cellCenter } from '../src/sim/map.js';
+import { parseMap } from '../src/sim/map.js';
+import { metre, thick } from './helpers.js';
 import { wrapAngle, headingTo } from '../src/sim/fmath.js';
 
 beforeAll(() => initPhysics());
@@ -12,7 +13,7 @@ const field = {
 };
 
 function setup() {
-  const w = createWorld(4, parseMap(field));
+  const w = createWorld(4, parseMap(thick(field)));
   spawnSquads(w, { A: ['rifleman', 'rifleman'], B: ['rifleman'] });
   return w;
 }
@@ -43,7 +44,7 @@ describe('autonomy', () => {
     b.heading = Math.PI / 2; // looking away
     a1.heading = Math.PI / 2; // a1 looks at B
     // a2 is somewhere else, looking at the wall, behind a little cover so it can't see B itself.
-    const spot = cellCenter(w.map, 2, 3);
+    const spot = metre(w.map, 2, 3);
     a2.x = spot.x;
     a2.z = spot.z;
     a2.heading = Math.PI; // facing -z... any direction away from B
@@ -68,17 +69,21 @@ describe('take cover action', () => {
   it('moves behind the nearest low cover facing the threat and crouches', async () => {
     const { applyPlans } = await import('../src/sim/world.js');
     const { makeWaypoint } = await import('../src/sim/plan.js');
-    const w = createWorld(2, parseMap({ name: 'cv', rows: ['############', '#A........B#', '#..........#', '#.....=....#', '#..........#', '############'] }));
+    const w = createWorld(2, parseMap(thick({ name: 'cv', rows: ['############', '#A........B#', '#..........#', '#.....=....#', '#..........#', '############'] })));
     spawnSquads(w, { A: ['rifleman'], B: ['rifleman'] });
     const [a, b] = w.soldiers;
     a.fire = b.fire = 'hold';
-    const start = cellCenter(w.map, 4, 2);
+    const start = metre(w.map, 4, 2);
     // Face +x (toward the cover at column 6 / B's side), then take cover.
     const wp = { ...makeWaypoint(start.x, start.z), fire: 'hold', actions: [{ type: 'face', x: start.x + 5, z: start.z }, { type: 'cover' }] };
     applyPlans(w, 'A', { [a.id]: [wp] });
     for (let i = 0; i < 60 * 6; i++) step(w);
-    const spot = cellCenter(w.map, 5, 3); // directly west of the cover tile
-    expect(Math.hypot(a.x - spot.x, a.z - spot.z)).toBeLessThan(0.05);
+    // Tucked in directly west of the cover block (metre 6, 3), within half a metre of it.
+    const cover = metre(w.map, 6, 3);
+    const gap = cover.x - 0.5 - a.x;
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThan(0.5);
+    expect(Math.abs(a.z - cover.z)).toBeLessThan(0.5);
     expect(a.stance).toBe('crouch');
   });
 });

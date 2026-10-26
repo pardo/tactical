@@ -47,8 +47,8 @@ const oneOf = (v, allowed) => (allowed.includes(v) ? v : allowed[0]);
 /** Defensive copy that only keeps well-formed data inside the map. Used on every plan entering the sim. */
 export function sanitizeWaypoints(map, waypoints) {
   if (!Array.isArray(waypoints)) return [];
-  const hw = map.width / 2;
-  const hh = map.height / 2;
+  const hw = map.sizeX / 2;
+  const hh = map.sizeZ / 2;
   const cx = (v) => Math.min(hw, Math.max(-hw, finite(v)));
   const cz = (v) => Math.min(hh, Math.max(-hh, finite(v)));
   const point = (p) => (p && typeof p === 'object' ? { x: cx(p.x), z: cz(p.z) } : null);

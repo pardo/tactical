@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initPhysics } from '../src/sim/physics.js';
 import { createWorld, spawnSquads, applyPlans, step } from '../src/sim/world.js';
-import { parseMap, cellCenter } from '../src/sim/map.js';
+import { parseMap } from '../src/sim/map.js';
+import { metre, thick } from './helpers.js';
 import { makeWaypoint } from '../src/sim/plan.js';
 import { sanitizeSquad, cycleRole, ROLES, WEAPONS } from '../src/sim/roles.js';
 import { reactionTime, weaponDamage } from '../src/sim/soldier/combat.js';
@@ -16,7 +17,7 @@ const corridor = {
 };
 
 function duel(roleA, roleB, setup = () => {}) {
-  const world = createWorld(5, parseMap(corridor));
+  const world = createWorld(5, parseMap(thick(corridor)));
   spawnSquads(world, { A: [roleA], B: [roleB] });
   // spawnSquads fills to 4 with riflemen but only one spawn cell each exists.
   setup(world);
@@ -46,7 +47,7 @@ describe('squads', () => {
   });
 
   it('spawns soldiers with role stats and gear', () => {
-    const world = createWorld(1, parseMap(corridor));
+    const world = createWorld(1, parseMap(thick(corridor)));
     spawnSquads(world, { A: ['breacher'], B: ['lmg'] });
     const [a, b] = world.soldiers;
     expect(a).toMatchObject({ role: 'breacher', weapon: 'shotgun', hp: ROLES.breacher.hp, charges: 2 });
@@ -76,7 +77,7 @@ describe('weapons', () => {
         w.rng.state = seed * 977 + 1;
         const b = w.soldiers.find((s) => s.team === 'B');
         const a = w.soldiers.find((s) => s.team === 'A');
-        const target = cellCenter(w.map, 2, 1);
+        const target = metre(w.map, 2, 1);
         applyPlans(w, 'B', { [b.id]: [makeWaypoint(target.x, target.z)] });
         a.heading = Math.PI / 2; // facing down the corridor towards B
       });
@@ -86,7 +87,7 @@ describe('weapons', () => {
   });
 
   it('magazines run dry and reload', () => {
-    const w = createWorld(5, parseMap(corridor));
+    const w = createWorld(5, parseMap(thick(corridor)));
     spawnSquads(w, { A: ['rifleman'], B: ['rifleman'] });
     for (const s of w.soldiers) s.hp = 1e6; // nobody dies; just burn ammo
     w.soldiers[0].heading = Math.PI / 2;
@@ -102,19 +103,19 @@ describe('weapons', () => {
 
 describe('utility grenades', () => {
   it('smoke blocks line of sight', () => {
-    const w = createWorld(1, parseMap(corridor));
+    const w = createWorld(1, parseMap(thick(corridor)));
     expect(hasLineOfSight(w, -10, 1.5, 0, 10, 1.5, 0)).toBe(true);
     w.smokes.push({ x: 0, z: 0, r: 3, until: 1e9 });
     expect(hasLineOfSight(w, -10, 1.5, 0, 10, 1.5, 0)).toBe(false);
   });
 
   it('a flashbang blinds whoever sees it and they stop shooting', () => {
-    const w = createWorld(3, parseMap(corridor));
+    const w = createWorld(3, parseMap(thick(corridor)));
     spawnSquads(w, { A: ['breacher'], B: ['rifleman'] });
     const [a, b] = w.soldiers;
     a.hp = 1e6; // the thrower must survive until the fuse runs out, or the match ends first
     b.heading = -Math.PI / 2; // looking towards A, and towards the incoming flash
-    const mid = cellCenter(w.map, 18, 1);
+    const mid = metre(w.map, 18, 1);
     // Hold fire, otherwise the thrower starts shooting instead of throwing.
     const wp = { ...makeWaypoint(a.x, a.z), fire: 'hold', actions: [{ type: 'grenade', kind: 'flash', x: mid.x, z: mid.z }] };
     applyPlans(w, 'A', { [a.id]: [wp] });

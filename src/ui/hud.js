@@ -1,4 +1,4 @@
-import { TOOLS } from './editor.js';
+import { TOOLS, BRUSHES } from './editor.js';
 import { ACTION_HELP } from './help.js';
 import { GO_CODE_NAMES } from '../sim/plan.js';
 
@@ -178,6 +178,7 @@ export function createHud(root, onAction) {
           'bar',
           JSON.stringify(model),
           `<div class="chips">${TOOLS.map((t) => btn('tool', t.label, { arg: t.id, cls: `tool ${model.tool === t.id ? 'sel' : ''}` })).join('')}</div>` +
+            `<div class="chips">${BRUSHES.map((b) => btn('brush', b.label, { arg: b.id, cls: `tool ${model.brush === b.id ? 'sel' : ''}`, title: 'Brush size' })).join('')}</div>` +
             btn('editorUndo', '↶', { cls: 'undo', title: 'Undo', disabled: !model.canUndo }),
         );
       }

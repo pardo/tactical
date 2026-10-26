@@ -16,9 +16,9 @@ async (page) => {
 
   // New blank map, then paint a wall stroke with one finger.
   await page.getByRole('button', { name: '🆕 New size' }).tap(); // 32×18 → 40×22
-  await page.getByRole('button', { name: '🆕 New size' }).tap(); // → 24×14
+  await page.getByRole('button', { name: '🆕 New size' }).tap(); // → 24×14 m (96×56 tiles of ¼ m)
   s = await state();
-  if (s.rows.length !== 14 || s.rows[0].length !== 24) fail(`size not 24×14: ${s.rows[0].length}×${s.rows.length}`);
+  if (s.rows.length !== 56 || s.rows[0].length !== 96) fail(`size not 96×56 tiles: ${s.rows[0].length}×${s.rows.length}`);
   await page.getByRole('button', { name: '▉ Wall' }).tap();
   const toScreen = (x, z) =>
     page.evaluate(
@@ -32,7 +32,7 @@ async (page) => {
     );
   const cdp = await page.context().newCDPSession(page);
   const touch = (type, p) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: p.x, y: p.y, id: 3 }] });
-  // Row z = -3.5 (cell row 3), from x = -8.5 to x = -2.5 (cells 3..9).
+  // Metre row 3 (z = -3.5, tile rows 12..15), from x = -8.5 to x = -2.5 (metres 3..9, tiles 12..39).
   const a = await toScreen(-8.5, -3.5);
   const b = await toScreen(-2.5, -3.5);
   await touch('touchStart', a);
@@ -40,8 +40,8 @@ async (page) => {
   await touch('touchEnd');
   await page.waitForTimeout(400);
   s = await state();
-  if (!/#{5,}/.test(s.rows[3].slice(3, 10))) fail(`stroke not painted: ${s.rows[3]}`);
-  if (s.rows[14 - 1 - 3] !== [...s.rows[3]].reverse().join('').replace(/A/g, 'B')) fail('stroke not mirrored');
+  if (!/#{20,}/.test(s.rows[13].slice(12, 40))) fail(`stroke not painted: ${s.rows[13]}`);
+  if (s.rows[56 - 1 - 13] !== [...s.rows[13]].reverse().join('').replace(/A/g, 'B')) fail('stroke not mirrored');
   if (!s.ok || s.warnings.length) fail(`painted map should stay valid and symmetric: ${JSON.stringify(s)}`);
 
   // A full-height wall splits the map → validation complains; undo fixes it.
@@ -49,7 +49,7 @@ async (page) => {
     const E = window.__tactical.editor.editor;
     E.beginStroke();
     E.state.tool = '#';
-    for (let z = 1; z < 13; z++) E.paint(11, z);
+    for (let z = 0; z < 14; z++) E.paint(11 * 4, z * 4); // metre column 11, 1 m brush
   });
   await page.waitForTimeout(400);
   s = await state();
@@ -68,6 +68,6 @@ async (page) => {
   await page.getByRole('button', { name: 'Deploy ▶' }).tap();
   await page.waitForTimeout(300);
   const m = await page.evaluate(() => ({ name: window.__tactical.game.match.map.name, w: window.__tactical.game.match.map.width, phase: window.__tactical.game.match.phase }));
-  if (m.name !== 'Phone test' || m.w !== 24 || m.phase !== 'planning') fail(`not playing the custom map: ${JSON.stringify(m)}`);
+  if (m.name !== 'Phone test' || m.w !== 96 || m.phase !== 'planning') fail(`not playing the custom map: ${JSON.stringify(m)}`);
   return 'ok: drag-paint mirrored, validation + undo, save, playing "Phone test" 24×14';
 }

@@ -345,7 +345,7 @@ function onNetEvent(e) {
 /** Map for an online start/resume: a built-in id, or the host's custom map if it validates. */
 function onlineMap(e) {
   if (MAPS[e.map]) return { mapId: e.map };
-  if (e.mapDef && validateMapDef(e.mapDef).ok) return { mapId: e.map, mapDef: { name: String(e.mapDef.name), rows: e.mapDef.rows } };
+  if (e.mapDef && validateMapDef(e.mapDef).ok) return { mapId: e.map, mapDef: { name: String(e.mapDef.name), rows: e.mapDef.rows, res: e.mapDef.res ?? 1 } };
   return { mapId: DEFAULT_MAP };
 }
 
@@ -360,17 +360,17 @@ function startMatch(mode, opts = {}) {
   const mapDef = opts.mapDef ?? getMapDef(mapId) ?? MAPS[DEFAULT_MAP];
   const match = createMatch({ mode, mapDef, mapId, seed, squads, localTeam: opts.localTeam, gameMode });
   const { map } = match;
-  const half = Math.max(map.width, map.height) / 2;
+  const half = Math.max(map.sizeX, map.sizeZ) / 2;
   view.setShadowBounds(half + 2);
   // Start framed on your own squad (spectators: whole map), looking toward the enemy.
   const own = mode === 'hotseat' ? 'A' : match.viewerTeam;
-  rig = createCameraRig(view.camera, { bounds: { x: map.width / 2, z: map.height / 2 }, distance: map.width * 0.8 });
+  rig = createCameraRig(view.camera, { bounds: { x: map.sizeX / 2, z: map.sizeZ / 2 }, distance: map.sizeX * 0.8 });
   rig.setViewport(viewW, viewH);
   if (own) {
     const v = teamView(match, own);
     rig.glideTo(v, { instant: true });
     rig.setHome(v);
-  } else rig.fitWidth(Math.max(map.width, viewW < viewH ? 0 : map.height * (viewW / viewH))); // spectating: whole map in view
+  } else rig.fitWidth(Math.max(map.sizeX, viewW < viewH ? 0 : map.sizeZ * (viewW / viewH))); // spectating: whole map in view
 
   g = {
     mode,
@@ -493,8 +493,8 @@ function teamView(match, team) {
   if (Math.abs(fx) > Math.abs(fz)) [fx, fz] = [Math.sign(fx), 0];
   else [fx, fz] = [0, Math.sign(fz) || -1];
   const portrait = viewW < viewH;
-  const across = fx ? map.height : map.width;
-  const distance = portrait ? rig.distanceForWidth(Math.min(across, PORTRAIT_VIEW_WIDTH)) : Math.max(map.width, map.height) * 0.6;
+  const across = fx ? map.sizeZ : map.sizeX;
+  const distance = portrait ? rig.distanceForWidth(Math.min(across, PORTRAIT_VIEW_WIDTH)) : Math.max(map.sizeX, map.sizeZ) * 0.6;
   // Look ahead of the squad: they sit low on screen, the ground toward the enemy above them.
   const ahead = Math.min(len * 0.4, distance * 0.16);
   let x = c.x + fx * ahead;
@@ -723,7 +723,7 @@ let ed = null;
 function openEditor(def) {
   endMatch();
   closeEditor();
-  ed = { editor: createEditor({ name: def.name, rows: def.rows }), group: null, built: -1, size: '', map: null, validation: null, note: '' };
+  ed = { editor: createEditor({ name: def.name, rows: def.rows, res: def.res }), group: null, built: -1, size: '', map: null, validation: null, note: '' };
   hud.overlay(null);
   buildEditorView();
 }
@@ -747,11 +747,11 @@ function buildEditorView() {
   const size = `${ed.map.width}x${ed.map.height}`;
   if (ed.size !== size) {
     ed.size = size;
-    const half = Math.max(ed.map.width, ed.map.height) / 2;
+    const half = Math.max(ed.map.sizeX, ed.map.sizeZ) / 2;
     view.setShadowBounds(half + 2);
-    rig = createCameraRig(view.camera, { bounds: half, distance: ed.map.width * 0.8 });
+    rig = createCameraRig(view.camera, { bounds: half, distance: ed.map.sizeX * 0.8 });
     rig.setViewport(viewW, viewH);
-    rig.fitWidth(ed.map.width);
+    rig.fitWidth(ed.map.sizeX);
   }
 }
 
@@ -765,13 +765,13 @@ function editorPaintAt(x, y) {
 function updateEditorHud() {
   const E = ed.editor;
   const v = ed.validation;
-  hud.status(`Map editor · ${E.width}×${E.height}`);
+  hud.status(`Map editor · ${E.size[0]}×${E.size[1]} m`);
   hud.buttons({ inMatch: false });
   hud.log([], false);
   hud.timeline({ visible: false });
   hud.hint(ed.note);
   hud.overlay(null);
-  hud.bar({ kind: 'editor', tool: E.state.tool, canUndo: E.state.undoStack.length > 0 });
+  hud.bar({ kind: 'editor', tool: E.state.tool, brush: E.state.brush, canUndo: E.state.undoStack.length > 0 });
   hud.panel({ kind: 'editor', name: E.state.name, ok: v.ok, errors: v.errors, warnings: v.warnings });
 }
 
@@ -802,7 +802,7 @@ function importMapText(text) {
     const v = validateMapDef(def);
     // Playability problems can be fixed in the editor; malformed files can't.
     if (v.errors.some((e) => /rows|unknown tile|size/.test(e))) throw new Error(v.errors[0]);
-    ed.editor.reset(def.rows);
+    ed.editor.reset(def.rows, def.res);
     ed.editor.state.name = String(def.name ?? 'Imported map').slice(0, 24);
     ed.note = 'Map imported';
   } catch (err) {
@@ -969,7 +969,7 @@ function onAction(action, arg) {
       return hud.overlay(null);
     case 'editor': {
       const def = getMapDef(ui.mapId) ?? MAPS[DEFAULT_MAP];
-      return openEditor({ name: isCustomMap(ui.mapId) ? def.name : `${def.name} copy`, rows: def.rows });
+      return openEditor({ name: isCustomMap(ui.mapId) ? def.name : `${def.name} copy`, rows: def.rows, res: def.res });
     }
     case 'loadReplay':
       return pickJsonFile(loadReplayText);
@@ -1198,6 +1198,9 @@ function onEditorAction(action, arg) {
     case 'tool':
       E.state.tool = arg;
       break;
+    case 'brush':
+      E.state.brush = Number(arg);
+      break;
     case 'editorUndo':
       E.undo();
       break;
@@ -1205,7 +1208,7 @@ function onEditorAction(action, arg) {
       E.state.name = String(arg).slice(0, 24);
       break;
     case 'editorSize': {
-      const i = SIZES.findIndex(([w, h]) => w === E.width && h === E.height);
+      const i = SIZES.findIndex(([w, h]) => w === E.size[0] && h === E.size[1]);
       const [w, h] = SIZES[(i + 1) % SIZES.length];
       E.reset(blankRows(w, h));
       ed.note = `New blank ${w}×${h} map`;
@@ -1438,7 +1441,7 @@ function drawPlans() {
   const doorFrame = editing() ? frames()[frames().length - 1] : frames()[g.recorder.turnAt(g.cursor)?.frame ?? 0];
   const closedDoors = new Set();
   match.world.doors.forEach((d, i) => {
-    if ((doorFrame.doors?.[i] ?? 'closed') === 'closed') closedDoors.add(`${d.cx},${d.cz}`);
+    if ((doorFrame.doors?.[i] ?? 'closed') === 'closed') closedDoors.add(d.id);
   });
   const estimates = g.plans.setPlans(match.map, plans, selected, closedDoors, grenadePredictor());
   g.plans.update(rig.state.distance);

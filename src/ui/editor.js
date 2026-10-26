@@ -1,7 +1,10 @@
+import { TILES_PER_METRE, upscaleRows } from '../sim/map.js';
+
 /**
- * Map editor state (pure logic, no DOM). Every edit is mirrored through the
- * map centre (point symmetry, Blue spawn ↔ Red spawn), so custom maps are fair
- * by construction. The outer border is always wall.
+ * Map editor state (pure logic, no DOM). Edits the map at full tile resolution
+ * (TILES_PER_METRE tiles per metre) with a square brush snapped to its own grid.
+ * Every edit is mirrored through the map centre (point symmetry, Blue spawn ↔ Red
+ * spawn), so custom maps are fair by construction. The outer border is always wall.
  */
 export const TOOLS = [
   { id: '#', label: '▉ Wall' },
@@ -10,6 +13,13 @@ export const TOOLS = [
   { id: '.', label: '◻ Floor' },
   { id: 'A', label: '⚑ Spawn' },
 ];
+/** Brush sizes in tiles: 1 m, ½ m, ¼ m (thin walls). */
+export const BRUSHES = [
+  { id: TILES_PER_METRE, label: '1 m' },
+  { id: TILES_PER_METRE / 2, label: '½ m' },
+  { id: 1, label: '¼ m' },
+];
+/** Map sizes in metres. */
 export const SIZES = [
   [24, 14],
   [32, 18],
@@ -17,6 +27,7 @@ export const SIZES = [
 ];
 const SWAP = { A: 'B', B: 'A' };
 
+/** A walled W×H metre map with four spawns per team (rows at 1 tile per metre). */
 export function blankRows(W, H) {
   const grid = Array.from({ length: H }, (_, y) =>
     Array.from({ length: W }, (_, x) => (x === 0 || y === 0 || x === W - 1 || y === H - 1 ? '#' : '.')),
@@ -28,8 +39,9 @@ export function blankRows(W, H) {
   return grid.map((r) => r.join(''));
 }
 
-export function createEditor({ name = 'My map', rows }) {
-  const st = { name, grid: rows.map((r) => [...r]), tool: '#', undoStack: [], version: 0 };
+/** @param res tiles per metre of `rows` (they are upscaled to full resolution) */
+export function createEditor({ name = 'My map', rows, res = 1 }) {
+  const st = { name, grid: upscaleRows(rows, res).map((r) => [...r]), tool: '#', brush: TILES_PER_METRE, undoStack: [], version: 0 };
   const W = () => st.grid[0].length;
   const H = () => st.grid.length;
 
@@ -41,6 +53,10 @@ export function createEditor({ name = 'My map', rows }) {
     get height() {
       return H();
     },
+    /** Size in metres. */
+    get size() {
+      return [W() / TILES_PER_METRE, H() / TILES_PER_METRE];
+    },
 
     /** Call at the start of a tap or drag so the whole stroke undoes in one step. */
     beginStroke() {
@@ -48,21 +64,39 @@ export function createEditor({ name = 'My map', rows }) {
       if (st.undoStack.length > 100) st.undoStack.shift();
     },
 
-    /** Paint the current tool at a cell (and its mirror). Returns true if anything changed. */
+    /**
+     * Paint the current tool with the brush square containing tile (cx, cz), and its
+     * mirror. Spawns are single tiles (one soldier each), placed like upscaled maps place
+     * them. Returns true if anything changed.
+     */
     paint(cx, cz) {
       const w = W();
       const h = H();
-      if (cx <= 0 || cz <= 0 || cx >= w - 1 || cz >= h - 1) return false; // border stays wall
-      const mx = w - 1 - cx;
-      const mz = h - 1 - cz;
+      const b = st.brush;
+      const x0 = Math.floor(cx / b) * b;
+      const z0 = Math.floor(cz / b) * b;
       const tool = st.tool;
-      if (mx === cx && mz === cz && tool === 'A') return false; // the centre can't be both teams' spawn
-      const mirror = SWAP[tool] ?? tool;
-      if (st.grid[cz][cx] === tool && st.grid[mz][mx] === mirror) return false;
-      st.grid[cz][cx] = tool;
-      st.grid[mz][mx] = mirror;
-      st.version++;
-      return true;
+      const cells = [];
+      if (tool === 'A') {
+        const lo = Math.floor((b - 1) / 2);
+        cells.push([x0 + lo, z0 + lo]);
+      } else {
+        for (let z = z0; z < z0 + b; z++) for (let x = x0; x < x0 + b; x++) cells.push([x, z]);
+      }
+      let changed = false;
+      for (const [x, z] of cells) {
+        if (x <= 0 || z <= 0 || x >= w - 1 || z >= h - 1) continue; // border stays wall
+        const mx = w - 1 - x;
+        const mz = h - 1 - z;
+        if (mx === x && mz === z && tool === 'A') continue; // the centre can't be both teams' spawn
+        const mirror = SWAP[tool] ?? tool;
+        if (st.grid[z][x] === tool && st.grid[mz][mx] === mirror) continue;
+        st.grid[z][x] = tool;
+        st.grid[mz][mx] = mirror;
+        changed = true;
+      }
+      if (changed) st.version++;
+      return changed;
     },
 
     undo() {
@@ -73,14 +107,14 @@ export function createEditor({ name = 'My map', rows }) {
       return true;
     },
 
-    reset(rows) {
+    reset(rows, res = 1) {
       api.beginStroke();
-      st.grid = rows.map((r) => [...r]);
+      st.grid = upscaleRows(rows, res).map((r) => [...r]);
       st.version++;
     },
 
     toDef() {
-      return { name: st.name.trim() || 'My map', rows: st.grid.map((r) => r.join('')) };
+      return { name: st.name.trim() || 'My map', res: TILES_PER_METRE, rows: st.grid.map((r) => r.join('')) };
     },
   };
   return api;

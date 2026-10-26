@@ -1,11 +1,11 @@
 import { DT, TICK_RATE } from '../constants.js';
 import { headingTo, wrapAngle, length, PI, sin, cos } from '../fmath.js';
-import { findPath } from '../nav.js';
+import { findPath, isNavigable } from '../nav.js';
 import { turnToward } from './soldier.js';
 import { throwGrenade } from '../grenades.js';
 import { ROLES } from '../roles.js';
 import { handleDoorAhead, breachableDoor, breachDoor, BREACH_TIME } from '../doors.js';
-import { Tile, tileAt, isWalkable, worldToCell, cellCenter } from '../map.js';
+import { Tile, CELL, tileAt, blockerToward, worldToCell, cellCenter } from '../map.js';
 import { makeNoise } from '../noise.js';
 
 export const SPEED = { walk: 1.6, run: 3.6, crouch: 0.9, engaged: 1.0 }; // m/s
@@ -94,16 +94,17 @@ const ORTHO = [
 export function findCoverSpot(world, x, z, dx, dz) {
   const { map } = world;
   const c = worldToCell(map, x, z);
+  const R = Math.ceil(COVER_SEARCH / CELL);
   let best = null;
-  for (let oz = -3; oz <= 3; oz++) {
-    for (let ox = -3; ox <= 3; ox++) {
+  for (let oz = -R; oz <= R; oz++) {
+    for (let ox = -R; ox <= R; ox++) {
       const cx = c.cx + ox;
       const cz = c.cz + oz;
-      if (!isWalkable(map, cx, cz) || tileAt(map, cx, cz) === Tile.DOOR) continue;
+      if (!isNavigable(map, cx, cz) || tileAt(map, cx, cz) === Tile.DOOR) continue;
       const p = cellCenter(map, cx, cz);
       const d = length(p.x - x, p.z - z);
       if (d > COVER_SEARCH) continue;
-      const covered = ORTHO.some(([nx, nz]) => nx * dx + nz * dz >= 0.6 && tileAt(map, cx + nx, cz + nz) === Tile.LOW_COVER);
+      const covered = ORTHO.some(([nx, nz]) => nx * dx + nz * dz >= 0.6 && blockerToward(map, cx, cz, nx, nz) === Tile.LOW_COVER);
       if (!covered) continue;
       const fwd = (p.x - x) * dx + (p.z - z) * dz;
       const right = (p.x - x) * -dz + (p.z - z) * dx;

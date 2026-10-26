@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initPhysics } from '../src/sim/physics.js';
 import { createWorld, applyPlans, step, hashWorld } from '../src/sim/world.js';
-import { parseMap, cellCenter } from '../src/sim/map.js';
+import { parseMap } from '../src/sim/map.js';
+import { metre, thick } from './helpers.js';
 import { makeWaypoint, sanitizeWaypoints, sanitizeGoCodes } from '../src/sim/plan.js';
 import { createSoldier } from '../src/sim/soldier/soldier.js';
 import { createPlanning } from '../src/ui/planning.js';
@@ -11,8 +12,8 @@ import { TURN_TICKS } from '../src/sim/constants.js';
 beforeAll(() => initPhysics());
 
 // An enemy sealed in its own pocket on the right keeps the match going without interfering.
-const map = parseMap({ name: 'g', rows: ['#############', '#.........#.#', '#.........#.#', '#############'] });
-const at = (cx, cz) => cellCenter(map, cx, cz);
+const map = parseMap(thick({ name: 'g', rows: ['#############', '#.........#.#', '#.........#.#', '#############'] }));
+const at = (cx, cz) => metre(map, cx, cz);
 
 function codePlan() {
   // Walk one cell, wait for Alpha, then walk on.

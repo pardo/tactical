@@ -1,4 +1,5 @@
 import { Tile } from './map.js';
+import { tilesChanged } from './nav.js';
 
 /**
  * Blow away a low cover tile: it becomes floor (walkable, no longer blocks
@@ -12,6 +13,7 @@ export function destroyCover(world, cx, cz) {
   world.physics.removeCollider(collider, false);
   world.coverColliders.delete(i);
   world.map.tiles[i] = Tile.FLOOR;
+  tilesChanged(world.map);
   world.destroyed.push(i);
   world.events.push({ type: 'coverDestroyed', cx, cz });
   return true;

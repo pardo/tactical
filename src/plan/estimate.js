@@ -1,5 +1,5 @@
 import { findPath } from '../sim/nav.js';
-import { worldToCell } from '../sim/map.js';
+import { worldToCell, doorIdAt } from '../sim/map.js';
 import { SPEED, ACTION_TIME } from '../sim/soldier/orders.js';
 import { DOOR_OPEN_TIME } from '../sim/doors.js';
 import { TURN_SECONDS } from '../sim/constants.js';
@@ -28,7 +28,7 @@ function doorsCrossed(map, a, b, closedDoors, counted) {
   let found = 0;
   for (let k = 0; k <= n; k++) {
     const { cx, cz } = worldToCell(map, a.x + ((b.x - a.x) * k) / n, a.z + ((b.z - a.z) * k) / n);
-    const key = `${cx},${cz}`;
+    const key = doorIdAt(map, cx, cz);
     if (closedDoors.has(key) && !counted.has(key)) {
       counted.add(key);
       found++;
@@ -41,7 +41,7 @@ function doorsCrossed(map, a, b, closedDoors, counted) {
  * Predicts how a plan plays out if nothing interrupts it (no enemies). Used for
  * path drawing, per-waypoint ETAs and the "where am I at the end of the turn" marker.
  *
- * @param closedDoors optional Set of "cx,cz" keys of closed doors (adds opening time)
+ * @param closedDoors optional Set of the ids of closed doors (adds opening time)
  * @param released go codes released this turn; waiting on any other code holds the soldier
  * @returns {{
  *   legs: { points: {x,z}[], move: string, blocked: boolean }[],

@@ -1,7 +1,7 @@
 import { createRng } from './rng.js';
 import { createHasher } from './hash.js';
 import { createPhysicsWorld, RAPIER } from './physics.js';
-import { Tile, cellCenter } from './map.js';
+import { Tile, CELL, cellCenter } from './map.js';
 import { createSoldier, resolveDeaths } from './soldier/soldier.js';
 import { updatePerception } from './soldier/perception.js';
 import { updateCombat } from './soldier/combat.js';
@@ -24,7 +24,7 @@ export const TEAMS = ['A', 'B'];
  */
 export function createWorld(seed, map, mode = 'elimination') {
   const physics = createPhysicsWorld();
-  physics.createCollider(RAPIER.ColliderDesc.cuboid(map.width / 2, 0.1, map.height / 2).setTranslation(0, -0.1, 0));
+  physics.createCollider(RAPIER.ColliderDesc.cuboid(map.sizeX / 2, 0.1, map.sizeZ / 2).setTranslation(0, -0.1, 0));
   const coverColliders = addMapColliders(physics, map);
   const doors = createDoors(physics, map);
   // Build the query structures so line-of-sight works before the first tick.
@@ -62,7 +62,7 @@ function addMapColliders(physics, map) {
       const t = map.tiles[cz * map.width + cx];
       if (t === Tile.LOW_COVER) {
         const c = cellCenter(map, cx, cz);
-        const desc = RAPIER.ColliderDesc.cuboid(0.5, LOW_COVER_HEIGHT / 2, 0.5).setTranslation(c.x, LOW_COVER_HEIGHT / 2, c.z);
+        const desc = RAPIER.ColliderDesc.cuboid(CELL / 2, LOW_COVER_HEIGHT / 2, CELL / 2).setTranslation(c.x, LOW_COVER_HEIGHT / 2, c.z);
         cover.set(cz * map.width + cx, physics.createCollider(desc));
         cx++;
         continue;
@@ -77,7 +77,7 @@ function addMapColliders(physics, map) {
       const len = end - cx + 1;
       const c = cellCenter(map, cx, cz);
       physics.createCollider(
-        RAPIER.ColliderDesc.cuboid(len / 2, h / 2, 0.5).setTranslation(c.x - 0.5 + len / 2, h / 2, c.z),
+        RAPIER.ColliderDesc.cuboid((len * CELL) / 2, h / 2, CELL / 2).setTranslation(c.x + ((len - 1) * CELL) / 2, h / 2, c.z),
       );
       cx = end + 1;
     }

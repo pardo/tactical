@@ -25,7 +25,7 @@ export function loadCustomMaps() {
 export function saveCustomMap(def) {
   const all = loadCustomMaps();
   const id = `custom:${def.name}`;
-  all[id] = { name: def.name, rows: def.rows };
+  all[id] = { name: def.name, rows: def.rows, res: def.res ?? 1 };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
   } catch {

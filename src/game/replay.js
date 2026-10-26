@@ -18,7 +18,7 @@ export function exportReplay(match) {
     squads: match.squads,
     turns: match.history,
     // Custom maps are embedded so the file plays anywhere.
-    ...(isCustomMap(match.mapId) ? { mapDef: { name: match.mapDef.name, rows: match.mapDef.rows } } : {}),
+    ...(isCustomMap(match.mapId) ? { mapDef: { name: match.mapDef.name, rows: match.mapDef.rows, res: match.mapDef.res ?? 1 } } : {}),
   };
 }
 

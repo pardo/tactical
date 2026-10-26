@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { parseMap, isWalkable, cellCenter, Tile } from '../sim/map.js';
-import { findPath } from '../sim/nav.js';
+import { parseMap, cellCenter } from '../sim/map.js';
+import { findPath, isNavigable } from '../sim/nav.js';
 import { createMapView, disposeMapView } from './mapView.js';
 import { createSoldierModel } from './soldierModel.js';
 import { TEAM_COLORS } from './soldierView.js';
@@ -17,15 +17,15 @@ export function createBackdrop(view, mapDef) {
   const { scene, camera } = view;
   const map = parseMap(mapDef);
   const group = createMapView(scene, map, null);
-  view.setShadowBounds(Math.max(map.width, map.height) / 2 + 2);
+  view.setShadowBounds(Math.max(map.sizeX, map.sizeZ) / 2 + 2);
   const open = [];
-  for (let cz = 0; cz < map.height; cz++) for (let cx = 0; cx < map.width; cx++) if (isWalkable(map, cx, cz)) open.push({ cx, cz });
+  for (let cz = 0; cz < map.height; cz++) for (let cx = 0; cx < map.width; cx++) if (isNavigable(map, cx, cz)) open.push({ cx, cz });
   const pick = () => {
     const c = open[Math.floor(Math.random() * open.length)];
     return cellCenter(map, c.cx, c.cz);
   };
   // Doors stand open so the patrols can come and go.
-  const doorStates = Array.from({ length: map.tiles.filter((t) => t === Tile.DOOR).length }, () => 'open');
+  const doorStates = map.doors.map(() => 'open');
 
   const walkers = ROLES.map((role, i) => {
     const team = i % 2 ? 'B' : 'A';
@@ -40,7 +40,7 @@ export function createBackdrop(view, mapDef) {
 
   let yaw = Math.random() * Math.PI * 2;
   let time = 0;
-  const dist = Math.max(map.width, map.height) * 0.62;
+  const dist = Math.max(map.sizeX, map.sizeZ) * 0.62;
 
   function update(dt) {
     time += dt;

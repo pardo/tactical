@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initPhysics } from '../src/sim/physics.js';
 import { createWorld, spawnSquads, applyPlans, step, beginTurnClock } from '../src/sim/world.js';
-import { parseMap, cellCenter } from '../src/sim/map.js';
+import { parseMap } from '../src/sim/map.js';
+import { metre, thick } from './helpers.js';
 import { makeWaypoint } from '../src/sim/plan.js';
 import { hasLineOfSight } from '../src/sim/los.js';
 import { DOOR_OPEN_TIME } from '../src/sim/doors.js';
@@ -26,9 +27,9 @@ const run = (w, ticks) => {
 
 describe('doors', () => {
   it('a closed door blocks sight; an open one does not', () => {
-    const w = createWorld(1, parseMap(rooms));
-    const a = cellCenter(w.map, 3, 2);
-    const b = cellCenter(w.map, 9, 2);
+    const w = createWorld(1, parseMap(thick(rooms)));
+    const a = metre(w.map, 3, 2);
+    const b = metre(w.map, 9, 2);
     expect(w.doors).toHaveLength(1);
     expect(hasLineOfSight(w, a.x, 1.5, a.z, b.x, 1.5, b.z)).toBe(false);
     w.doors[0].state = 'open';
@@ -38,12 +39,12 @@ describe('doors', () => {
   });
 
   it('walking through a closed door opens it after a short pause', () => {
-    const w = createWorld(1, parseMap(rooms));
+    const w = createWorld(1, parseMap(thick(rooms)));
     spawnSquads(w, { A: ['rifleman'], B: ['rifleman'] });
     const [a, b] = w.soldiers;
     b.fire = 'hold';
     a.fire = 'hold';
-    const target = cellCenter(w.map, 8, 2);
+    const target = metre(w.map, 8, 2);
     applyPlans(w, 'A', { [a.id]: [{ ...makeWaypoint(target.x, target.z), fire: 'hold' }] });
     let openedAt = null;
     for (let i = 0; i < 60 * 8 && openedAt === null; i++) {
@@ -58,13 +59,13 @@ describe('doors', () => {
   });
 
   it('a breach charge blows the door and stuns the defender behind it', () => {
-    const w = createWorld(2, parseMap(rooms));
+    const w = createWorld(2, parseMap(thick(rooms)));
     spawnSquads(w, { A: ['breacher'], B: ['rifleman'] });
     const [a, b] = w.soldiers;
-    const stack = cellCenter(w.map, 5, 2);
+    const stack = metre(w.map, 5, 2);
     const door = w.doors[0];
     // Defender waits right behind the door, facing it.
-    const behind = cellCenter(w.map, 8, 2);
+    const behind = metre(w.map, 8, 2);
     b.x = behind.x;
     b.z = behind.z;
     b.heading = -Math.PI / 2;
@@ -82,11 +83,11 @@ describe('doors', () => {
   });
 
   it("'until' holds a soldier until that moment of the turn", () => {
-    const w = createWorld(1, parseMap(rooms));
+    const w = createWorld(1, parseMap(thick(rooms)));
     spawnSquads(w, { A: ['rifleman'], B: ['rifleman'] });
     const [a] = w.soldiers;
     const here = { x: a.x, z: a.z };
-    const next = cellCenter(w.map, 3, 2);
+    const next = metre(w.map, 3, 2);
     applyPlans(w, 'A', {
       [a.id]: [{ ...makeWaypoint(here.x, here.z), actions: [{ type: 'until', t: 2 }] }, makeWaypoint(next.x, next.z)],
     });
@@ -101,20 +102,21 @@ describe('doors', () => {
 describe('destructible cover', () => {
   it('a frag next to low cover destroys it: walkable, and no longer blocks sight', async () => {
     const { Tile, isWalkable } = await import('../src/sim/map.js');
-    const w = createWorld(1, parseMap({ name: 'c', rows: ['############', '#A........B#', '#....==....#', '#..........#', '############'] }));
+    const w = createWorld(1, parseMap(thick({ name: 'c', rows: ['############', '#A........B#', '#....==....#', '#..........#', '############'] })));
     spawnSquads(w, { A: ['demolition'], B: ['rifleman'] });
     const [a] = w.soldiers;
     a.hp = 1e6;
     w.soldiers[1].hp = 1e6;
-    const cover = cellCenter(w.map, 5, 2);
+    const cover = metre(w.map, 5, 2);
     // Line across the cover at knee height is blocked before the blast.
     expect(hasLineOfSight(w, cover.x, 0.5, cover.z - 1.2, cover.x, 0.5, cover.z + 1.2)).toBe(false);
     const wp = { ...makeWaypoint(a.x, a.z), fire: 'hold', actions: [{ type: 'grenade', kind: 'frag', x: cover.x + 0.5, z: cover.z }] };
     applyPlans(w, 'A', { [a.id]: [wp] });
     run(w, 60 * 4);
     expect(w.destroyed.length).toBeGreaterThan(0);
-    expect(w.map.tiles[2 * w.map.width + 5]).toBe(Tile.FLOOR);
-    expect(isWalkable(w.map, 5, 2)).toBe(true);
+    // The middle of the 1 m cover block at metre (5, 2).
+    expect(w.map.tiles[(2 * 4 + 2) * w.map.width + 5 * 4 + 2]).toBe(Tile.FLOOR);
+    expect(isWalkable(w.map, 5 * 4 + 2, 2 * 4 + 2)).toBe(true);
     w.physics.step();
     expect(hasLineOfSight(w, cover.x, 0.5, cover.z - 1.2, cover.x, 0.5, cover.z + 1.2)).toBe(true);
   });

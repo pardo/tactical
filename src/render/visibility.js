@@ -1,4 +1,4 @@
-import { Tile } from '../sim/map.js';
+import { Tile, CELL } from '../sim/map.js';
 
 /**
  * 2D visibility polygons on the tile grid, for drawing vision cones and fog of war.
@@ -11,12 +11,10 @@ const EPS = 1e-4;
 /**
  * Blocking test for sight lines: walls, closed doors and the map edge. Low cover
  * is below eye height, so it never blocks.
- * @param doorStates frame door states in door (cell) order; missing = closed
+ * @param doorStates frame door states in door order; missing = closed
  */
 export function sightBlocker(map, doorStates) {
-  const doorIdx = new Int32Array(map.width * map.height).fill(-1);
-  let n = 0;
-  for (let i = 0; i < map.tiles.length; i++) if (map.tiles[i] === Tile.DOOR) doorIdx[i] = n++;
+  const doorIdx = map.doorIndex;
   return (cx, cz) => {
     if (cx < 0 || cz < 0 || cx >= map.width || cz >= map.height) return true;
     const i = cz * map.width + cx;
@@ -29,11 +27,14 @@ export function sightBlocker(map, doorStates) {
 
 /**
  * Distance along a ray from (x, z) to the first blocking cell (grid DDA), capped at maxDist.
- * World coords; cell (cx, cz) spans x ∈ [cx - w/2, cx - w/2 + 1).
+ * World coords in, metres out; the walk itself is in tile units.
  */
 export function castGrid(map, blocked, x, z, dx, dz, maxDist) {
-  const gx = x + map.width / 2;
-  const gz = z + map.height / 2;
+  const t = castTiles(map, blocked, (x + map.sizeX / 2) / CELL, (z + map.sizeZ / 2) / CELL, dx, dz, maxDist / CELL);
+  return t * CELL;
+}
+
+function castTiles(map, blocked, gx, gz, dx, dz, maxDist) {
   let cx = Math.floor(gx);
   let cz = Math.floor(gz);
   if (blocked(cx, cz)) return 0;
@@ -93,7 +94,7 @@ export function gridCorners(map, blocked) {
       const key = cz * (map.width + 1) + cx;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(cx - map.width / 2, cz - map.height / 2);
+      out.push(cx * CELL - map.sizeX / 2, cz * CELL - map.sizeZ / 2);
     }
   }
   return out;

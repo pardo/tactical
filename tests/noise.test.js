@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initPhysics } from '../src/sim/physics.js';
 import { createWorld, applyPlans, step } from '../src/sim/world.js';
-import { parseMap, cellCenter } from '../src/sim/map.js';
+import { parseMap } from '../src/sim/map.js';
+import { metre, thick } from './helpers.js';
 import { makeWaypoint } from '../src/sim/plan.js';
 import { createSoldier } from '../src/sim/soldier/soldier.js';
 import { createRecorder, HEARD_TTL } from '../src/game/recorder.js';
@@ -33,9 +34,9 @@ const noises = (w, ticks, team) => {
 };
 
 function setup(soldiers) {
-  const w = createWorld(1, parseMap(map));
+  const w = createWorld(1, parseMap(thick(map)));
   const made = soldiers.map(([team, cx, cz, heading = 0]) => {
-    const c = cellCenter(w.map, cx, cz);
+    const c = metre(w.map, cx, cz);
     return createSoldier(w, { team, x: c.x, z: c.z, heading });
   });
   return { w, made };
@@ -48,7 +49,7 @@ describe('noise', () => {
       ['B', 9, 1, Math.PI], // in the next room, facing away from the door
     ]);
     const [a, b] = made;
-    applyPlans(w, 'A', { [a.id]: [makeWaypoint(cellCenter(w.map, 8, 3).x, cellCenter(w.map, 8, 3).z)] });
+    applyPlans(w, 'A', { [a.id]: [makeWaypoint(metre(w.map, 8, 3).x, metre(w.map, 8, 3).z)] });
     const heard = [];
     for (let i = 0; i < 120 && !heard.length; i++) {
       step(w);
@@ -67,7 +68,7 @@ describe('noise', () => {
     const [a] = made;
     const door = w.doors[0];
     expect(Math.hypot(made[1].x - door.x, made[1].z - door.z)).toBeGreaterThan(NOISE_RADIUS.door);
-    applyPlans(w, 'A', { [a.id]: [makeWaypoint(cellCenter(w.map, 8, 2).x, cellCenter(w.map, 8, 2).z)] });
+    applyPlans(w, 'A', { [a.id]: [makeWaypoint(metre(w.map, 8, 2).x, metre(w.map, 8, 2).z)] });
     expect(noises(w, 120)).toHaveLength(0);
     expect(door.state).toBe('open');
   });
@@ -78,7 +79,7 @@ describe('noise', () => {
         ['A', 2, 5],
         ['B', 8, 2], // other side of the corridor wall
       ]);
-      const dest = cellCenter(w.map, 9, 5);
+      const dest = metre(w.map, 9, 5);
       const wp = makeWaypoint(dest.x, dest.z);
       wp.move = move;
       applyPlans(w, 'A', { [made[0].id]: [wp] });
@@ -94,7 +95,7 @@ describe('noise', () => {
       ['A', 2, 5],
       ['B', 10, 2],
     ]);
-    const dest = cellCenter(w.map, 6, 5);
+    const dest = metre(w.map, 6, 5);
     const wp = makeWaypoint(dest.x, dest.z);
     wp.move = 'run';
     applyPlans(w, 'A', { [made[0].id]: [wp] });
@@ -120,7 +121,7 @@ describe('noise', () => {
     ]);
     const [a, b] = made;
     // Blue stands in the next room and is ordered to face away from the door.
-    const here = cellCenter(w.map, 11, 1);
+    const here = metre(w.map, 11, 1);
     const wp = makeWaypoint(here.x, here.z);
     wp.actions.push({ type: 'face', x: here.x + 3, z: here.z });
     applyPlans(w, 'B', { [b.id]: [wp] });
@@ -128,7 +129,7 @@ describe('noise', () => {
     expect(b.orders).toHaveLength(0); // orders done: the soldier is idle but holding the angle
     const held = b.heading;
     // Red walks through the door behind Blue's back.
-    applyPlans(w, 'A', { [a.id]: [makeWaypoint(cellCenter(w.map, 7, 2).x, cellCenter(w.map, 7, 2).z)] });
+    applyPlans(w, 'A', { [a.id]: [makeWaypoint(metre(w.map, 7, 2).x, metre(w.map, 7, 2).z)] });
     let heard = false;
     for (let i = 0; i < 150 && !a.visible.length && !b.visible.length; i++) {
       step(w);
@@ -146,7 +147,7 @@ describe('noise', () => {
     ]);
     const [a, b] = made;
     const held = b.heading;
-    applyPlans(w, 'A', { [a.id]: [makeWaypoint(cellCenter(w.map, 7, 2).x, cellCenter(w.map, 7, 2).z)] });
+    applyPlans(w, 'A', { [a.id]: [makeWaypoint(metre(w.map, 7, 2).x, metre(w.map, 7, 2).z)] });
     for (let i = 0; i < 120 && !w.doors[0].state.startsWith('open'); i++) step(w);
     step(w);
     step(w);

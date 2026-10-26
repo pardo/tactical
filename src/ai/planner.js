@@ -1,7 +1,7 @@
 import { createRng } from '../sim/rng.js';
-import { findPath } from '../sim/nav.js';
+import { findPath, isNavigable } from '../sim/nav.js';
 import { hasLineOfSight } from '../sim/los.js';
-import { Tile, tileAt, isWalkable, cellCenter, worldToCell } from '../sim/map.js';
+import { Tile, CELL, tileAt, blockerToward, cellCenter, worldToCell } from '../sim/map.js';
 import { makeWaypoint } from '../sim/plan.js';
 import { TURN_TICKS } from '../sim/constants.js';
 import { GRENADE_RANGE, GRENADE } from '../sim/grenades.js';
@@ -20,6 +20,9 @@ const FORGET_AFTER = TURN_TICKS * 4;
 /** Search grid: the map is split into SECTOR×SECTOR metre cells, each remembering when we last had eyes on it. */
 const SECTOR = 4;
 const SEARCH_SIGHT = 6;
+/** Candidate spots are sampled every STRIDE tiles (half a metre): plenty of choice, a sixteenth of the raycasts. */
+const STRIDE = Math.max(1, Math.round(0.5 / CELL));
+const standable = (map, cx, cz) => isNavigable(map, cx, cz) && tileAt(map, cx, cz) !== Tile.DOOR;
 
 const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.z - b.z) ** 2);
 
@@ -40,14 +43,14 @@ const tieBreak = (s) => (a, b) => side(s) * (a.x - b.x) || side(s) * (a.z - b.z)
 function nearestWalkable(world, s, p) {
   const { map } = world;
   const c = worldToCell(map, p.x, p.z);
-  if (isWalkable(map, c.cx, c.cz)) return p;
+  if (isNavigable(map, c.cx, c.cz)) return p;
   let best = null;
-  for (let r = 1; r < 6 && !best; r++) {
+  for (let r = 1; r < 6 / CELL && !best; r++) {
     for (let dz = -r; dz <= r; dz++) {
       for (let dx = -r; dx <= r; dx++) {
         const cx = c.cx + dx;
         const cz = c.cz + dz;
-        if (!isWalkable(map, cx, cz) || tileAt(map, cx, cz) === Tile.DOOR) continue;
+        if (!standable(map, cx, cz)) continue;
         const q = { ...cellCenter(map, cx, cz) };
         q.d = dist(q, p);
         if (!best || q.d < best.d - 1e-9 || (Math.abs(q.d - best.d) <= 1e-9 && tieBreak(s)(q, best) < 0)) best = q;
@@ -119,7 +122,7 @@ function coverAgainst(map, cx, cz, threat) {
   let best = null;
   for (const [ox, oz] of ORTHO) {
     if ((ox * dx + oz * dz) / len < 0.6) continue;
-    const t = tileAt(map, cx + ox, cz + oz);
+    const t = blockerToward(map, cx, cz, ox, oz);
     if (t === Tile.LOW_COVER) return 'low';
     if (t === Tile.WALL) best = 'wall';
   }
@@ -130,13 +133,13 @@ function coverAgainst(map, cx, cz, threat) {
 function findSpot(world, s, near, threat, radius, taken) {
   const { map } = world;
   const c = worldToCell(map, near.x, near.z);
-  const R = Math.ceil(radius);
+  const R = Math.ceil(radius / CELL / STRIDE) * STRIDE;
   const candidates = [];
-  for (let dz = -R; dz <= R; dz++) {
-    for (let dx = -R; dx <= R; dx++) {
+  for (let dz = -R; dz <= R; dz += STRIDE) {
+    for (let dx = -R; dx <= R; dx += STRIDE) {
       const cx = c.cx + dx;
       const cz = c.cz + dz;
-      if (!isWalkable(map, cx, cz) || tileAt(map, cx, cz) === Tile.DOOR) continue;
+      if (!standable(map, cx, cz)) continue;
       const p = cellCenter(map, cx, cz);
       const d = dist(p, near);
       if (d > radius + 0.01 || taken.some((t) => dist(t, p) < 1.2)) continue;
@@ -153,13 +156,13 @@ function findSpot(world, s, near, threat, radius, taken) {
 function findOverwatch(world, s, threat, radius, taken) {
   const { map } = world;
   const c = worldToCell(map, s.x, s.z);
-  const R = Math.ceil(radius);
+  const R = Math.ceil(radius / CELL / STRIDE) * STRIDE;
   let best = null;
-  for (let dz = -R; dz <= R; dz++) {
-    for (let dx = -R; dx <= R; dx++) {
+  for (let dz = -R; dz <= R; dz += STRIDE) {
+    for (let dx = -R; dx <= R; dx += STRIDE) {
       const cx = c.cx + dx;
       const cz = c.cz + dz;
-      if (!isWalkable(map, cx, cz) || tileAt(map, cx, cz) === Tile.DOOR) continue;
+      if (!standable(map, cx, cz)) continue;
       const p = cellCenter(map, cx, cz);
       if (dist(p, s) > radius || taken.some((t) => dist(t, p) < 1.2)) continue;
       if (!hasLineOfSight(world, p.x, EYE_HEIGHT.stand, p.z, threat.x, BODY_HEIGHT.stand, threat.z)) continue;
@@ -180,8 +183,8 @@ export function createAI(team, seed = 1) {
 
   function sectorGrid(map) {
     if (!sectors) {
-      const cols = Math.ceil(map.width / SECTOR);
-      const rows = Math.ceil(map.height / SECTOR);
+      const cols = Math.ceil(map.sizeX / SECTOR);
+      const rows = Math.ceil(map.sizeZ / SECTOR);
       sectors = { cols, rows, seen: new Float64Array(cols * rows).fill(-Infinity) };
     }
     return sectors;
@@ -196,11 +199,13 @@ export function createAI(team, seed = 1) {
       for (let c = 0; c < grid.cols; c++) {
         const seen = grid.seen[r * grid.cols + c];
         let p = null;
-        for (let dz = 0; dz < SECTOR && !p; dz++) {
-          for (let dx = 0; dx < SECTOR && !p; dx++) {
-            const cx = c * SECTOR + ((dx + 2) % SECTOR);
-            const cz = r * SECTOR + ((dz + 2) % SECTOR);
-            if (isWalkable(map, cx, cz) && tileAt(map, cx, cz) !== Tile.DOOR) p = cellCenter(map, cx, cz);
+        // Try the sector's tiles starting from its middle (half-metre steps).
+        const S = SECTOR / CELL;
+        for (let dz = 0; dz < S && !p; dz += STRIDE) {
+          for (let dx = 0; dx < S && !p; dx += STRIDE) {
+            const cx = c * S + ((dx + S / 2) % S);
+            const cz = r * S + ((dz + S / 2) % S);
+            if (standable(map, cx, cz)) p = cellCenter(map, cx, cz);
           }
         }
         if (!p) continue;
@@ -230,8 +235,8 @@ export function createAI(team, seed = 1) {
       if (s.team !== team || !s.alive) continue;
       for (let r = 0; r < grid.rows; r++) {
         for (let c = 0; c < grid.cols; c++) {
-          const x = (c + 0.5) * SECTOR - world.map.width / 2;
-          const z = (r + 0.5) * SECTOR - world.map.height / 2;
+          const x = (c + 0.5) * SECTOR - world.map.sizeX / 2;
+          const z = (r + 0.5) * SECTOR - world.map.sizeZ / 2;
           if (dist({ x, z }, s) <= SEARCH_SIGHT) grid.seen[r * grid.cols + c] = world.tick;
         }
       }

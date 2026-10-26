@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initPhysics } from '../src/sim/physics.js';
-import { parseMap, isWalkable, cellCenter } from '../src/sim/map.js';
+import { parseMap, isWalkable, cellCenter, CELL, Tile } from '../src/sim/map.js';
 import { findCellPath } from '../src/sim/nav.js';
 import { createMatch } from '../src/game/match.js';
 import { MAPS, MAP_IDS } from '../src/maps/index.js';
@@ -32,14 +32,33 @@ describe.each(MAP_IDS)('map %s', (id) => {
   });
 
   it('has enough walkable ground inside the zone', () => {
-    let cells = 0;
+    let area = 0;
     for (let cz = 0; cz < map.height; cz++) {
       for (let cx = 0; cx < map.width; cx++) {
         const c = cellCenter(map, cx, cz);
-        if (isWalkable(map, cx, cz) && Math.hypot(c.x, c.z) <= ZONE.radius) cells++;
+        if (isWalkable(map, cx, cz) && Math.hypot(c.x, c.z) <= ZONE.radius) area += CELL * CELL;
       }
     }
-    expect(cells).toBeGreaterThanOrEqual(8);
+    expect(area).toBeGreaterThanOrEqual(8);
+  });
+
+  it('upscales to one-tile-thick walls and stays point-symmetric', () => {
+    const { width: W, height: H, tiles } = map;
+    for (let i = 0; i < tiles.length; i++) expect(tiles[i]).toBe(tiles[tiles.length - 1 - i]);
+    // Mostly thin walls: solid 2×2 blocks of wall only
+    // remain where the old map had walls 2 m+ thick or a lone pillar.
+    const wall = (x, z) => tiles[z * W + x] === Tile.WALL;
+    let thin = 0;
+    let solid = 0;
+    for (let z = 1; z < H - 2; z++) {
+      for (let x = 1; x < W - 2; x++) {
+        if (!wall(x, z)) continue;
+        if (wall(x + 1, z) && wall(x, z + 1) && wall(x + 1, z + 1)) solid++;
+        else thin++;
+      }
+    }
+    expect(solid).toBeLessThan(thin);
+    expect(map.spawns.A.map(({ cx, cz }) => [W - 1 - cx, H - 1 - cz])).toEqual(map.spawns.B.map(({ cx, cz }) => [cx, cz]));
   });
 
   it.each(['elimination', 'zone'])('AI vs AI finishes in %s mode', (gameMode) => {

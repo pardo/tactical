@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Tile } from '../sim/map.js';
+import { Tile, TILES_PER_METRE } from '../sim/map.js';
 
 /**
  * Procedural textures, drawn on canvases at load time: no image assets to download.
@@ -212,54 +212,74 @@ export function mainArea(map) {
 }
 
 /**
- * The whole floor as one baked texture: per-cell material, ambient occlusion along
+ * The whole floor as one baked texture: per-metre material, ambient occlusion along
  * wall bases, grime, cracks and painted spawn zones.
- * @param px pixels per cell (lower for the editor, which rebuilds often)
+ * @param px pixels per metre (lower for the editor, which rebuilds often)
  */
 export function bakeFloor(map, theme, px = 32) {
   const { width, height, tiles } = map;
-  const [c, g] = canvas(width * px, height * px);
+  const k = TILES_PER_METRE;
+  const tp = px / k; // pixels per tile
+  const [c, g] = canvas(width * tp, height * tp);
   const rand = rng(hashString(map.name ?? 'map') ^ (width * 73856093) ^ (height * 19349663));
   const main = mainArea(map);
   const isWall = (cx, cz) => cx < 0 || cz < 0 || cx >= width || cz >= height || tiles[cz * width + cx] === Tile.WALL;
+  const regionAt = (cx, cz) => (main[cz * width + cx] ? theme.outdoor : theme.indoor);
 
-  for (let cz = 0; cz < height; cz++) {
-    for (let cx = 0; cx < width; cx++) {
-      const i = cz * width + cx;
-      const region = main[i] ? theme.outdoor : theme.indoor;
-      FLOOR_PAINTERS[region.pattern](g, rand, cx * px, cz * px, px, region.color, cx, cz);
-    }
-  }
-
-  // Doorway thresholds: a darker strip across the door cell.
-  for (let cz = 0; cz < height; cz++) {
-    for (let cx = 0; cx < width; cx++) {
-      if (tiles[cz * width + cx] !== Tile.DOOR) continue;
-      g.fillStyle = shade(theme.trim, 0.7);
-      g.fillRect(cx * px + px * 0.08, cz * px + px * 0.08, px * 0.84, px * 0.84);
-    }
-  }
-
-  // Curbs: lighter sidewalk strip where the open street meets a building wall.
-  if (theme.curbs) {
-    for (let cz = 0; cz < height; cz++) {
-      for (let cx = 0; cx < width; cx++) {
-        const i = cz * width + cx;
-        if (!main[i] || tiles[i] === Tile.WALL) continue;
-        const near = isWall(cx - 1, cz) || isWall(cx + 1, cz) || isWall(cx, cz - 1) || isWall(cx, cz + 1);
-        if (!near) continue;
-        g.fillStyle = 'rgba(170,165,155,0.28)';
-        g.fillRect(cx * px, cz * px, px, px);
+  // Patterns are drawn a metre square at a time, in the region of the square's centre;
+  // tiles of the other region inside a square (a thin wall splits it) are redrawn clipped.
+  const mw = Math.ceil(width / k);
+  const mh = Math.ceil(height / k);
+  for (let mz = 0; mz < mh; mz++) {
+    for (let mx = 0; mx < mw; mx++) {
+      const cx0 = mx * k;
+      const cz0 = mz * k;
+      const r0 = regionAt(Math.min(cx0 + (k >> 1), width - 1), Math.min(cz0 + (k >> 1), height - 1));
+      FLOOR_PAINTERS[r0.pattern](g, rand, mx * px, mz * px, px, r0.color, mx, mz);
+      for (let cz = cz0; cz < Math.min(cz0 + k, height); cz++) {
+        for (let cx = cx0; cx < Math.min(cx0 + k, width); cx++) {
+          const r = regionAt(cx, cz);
+          if (r === r0 || isWall(cx, cz)) continue;
+          g.save();
+          g.beginPath();
+          g.rect(cx * tp, cz * tp, tp, tp);
+          g.clip();
+          FLOOR_PAINTERS[r.pattern](g, rand, mx * px, mz * px, px, r.color, mx, mz);
+          g.restore();
+        }
       }
     }
   }
 
-  // Painted spawn zones: team-coloured hatched pads.
+  // Doorway thresholds: a darker strip across each door opening.
+  g.fillStyle = shade(theme.trim, 0.7);
+  for (const d of map.doors ?? []) {
+    const inset = tp * 0.3;
+    g.fillRect(d.x0 * tp + inset, d.z0 * tp + inset, (d.x1 - d.x0 + 1) * tp - 2 * inset, (d.z1 - d.z0 + 1) * tp - 2 * inset);
+  }
+
+  // Curbs: lighter sidewalk strip where the open street meets a building wall.
+  if (theme.curbs) {
+    const reach = Math.max(1, k >> 1);
+    for (let cz = 0; cz < height; cz++) {
+      for (let cx = 0; cx < width; cx++) {
+        const i = cz * width + cx;
+        if (!main[i] || tiles[i] === Tile.WALL) continue;
+        let near = false;
+        for (let s = 1; s <= reach && !near; s++) near = isWall(cx - s, cz) || isWall(cx + s, cz) || isWall(cx, cz - s) || isWall(cx, cz + s);
+        if (!near) continue;
+        g.fillStyle = 'rgba(170,165,155,0.28)';
+        g.fillRect(cx * tp, cz * tp, tp, tp);
+      }
+    }
+  }
+
+  // Painted spawn zones: team-coloured hatched pads, a metre square around each spawn.
   const SPAWN = { A: '74,144,226', B: '226,87,74' };
   for (const team of ['A', 'B']) {
     for (const { cx, cz } of map.spawns[team]) {
-      const x = cx * px;
-      const y = cz * px;
+      const x = (cx + 0.5) * tp - px / 2;
+      const y = (cz + 0.5) * tp - px / 2;
       g.fillStyle = `rgba(${SPAWN[team]},0.16)`;
       g.fillRect(x, y, px, px);
       g.save();
@@ -268,10 +288,10 @@ export function bakeFloor(map, theme, px = 32) {
       g.clip();
       g.strokeStyle = `rgba(${SPAWN[team]},0.35)`;
       g.lineWidth = px / 10;
-      for (let k = -px; k < px * 2; k += px / 3) {
+      for (let k2 = -px; k2 < px * 2; k2 += px / 3) {
         g.beginPath();
-        g.moveTo(x + k, y);
-        g.lineTo(x + k - px, y + px);
+        g.moveTo(x + k2, y);
+        g.lineTo(x + k2 - px, y + px);
         g.stroke();
       }
       g.restore();
@@ -283,14 +303,14 @@ export function bakeFloor(map, theme, px = 32) {
     g.strokeStyle = 'rgba(230,190,40,0.55)';
     g.lineWidth = px / 8;
     g.setLineDash([px * 0.8, px * 0.4]);
-    g.strokeRect(1.5 * px, 1.5 * px, (width - 3) * px, (height - 3) * px);
+    g.strokeRect(1.5 * px, 1.5 * px, (map.sizeX - 3) * px, (map.sizeZ - 3) * px);
     g.setLineDash([]);
   }
 
   // Grime: soft dark stains, more of them indoors' corners and along walls.
-  for (let k = 0; k < width * height * 0.08; k++) {
-    const x = rand() * width * px;
-    const y = rand() * height * px;
+  for (let k = 0; k < map.sizeX * map.sizeZ * 0.08; k++) {
+    const x = rand() * map.sizeX * px;
+    const y = rand() * map.sizeZ * px;
     const r = px * (0.4 + rand() * 1.6);
     const grad = g.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, `rgba(20,16,10,${0.08 + rand() * 0.12})`);
@@ -301,9 +321,9 @@ export function bakeFloor(map, theme, px = 32) {
   // Cracks: short jagged polylines.
   g.strokeStyle = 'rgba(0,0,0,0.35)';
   g.lineWidth = 1;
-  for (let k = 0; k < width * height * 0.03; k++) {
-    let x = rand() * width * px;
-    let y = rand() * height * px;
+  for (let k = 0; k < map.sizeX * map.sizeZ * 0.03; k++) {
+    let x = rand() * map.sizeX * px;
+    let y = rand() * map.sizeZ * px;
     g.beginPath();
     g.moveTo(x, y);
     let a = rand() * Math.PI * 2;
@@ -324,21 +344,23 @@ export function bakeFloor(map, theme, px = 32) {
     g.fillStyle = grad;
     g.fillRect(x, y, w, h);
   };
+  // The shadow fades over ~0.45 m, so it spans several tiles: drawn on the tile touching
+  // the wall, reaching into its neighbours.
   const d = px * 0.45;
   for (let cz = 0; cz < height; cz++) {
     for (let cx = 0; cx < width; cx++) {
       if (isWall(cx, cz)) continue;
-      const x = cx * px;
-      const y = cz * px;
-      if (isWall(cx - 1, cz)) ao(x, y, d, px, x, 0, x + d, 0);
-      if (isWall(cx + 1, cz)) ao(x + px - d, y, d, px, x + px, 0, x + px - d, 0);
-      if (isWall(cx, cz - 1)) ao(x, y, px, d, 0, y, 0, y + d);
-      if (isWall(cx, cz + 1)) ao(x, y + px - d, px, d, 0, y + px, 0, y + px - d);
+      const x = cx * tp;
+      const y = cz * tp;
+      if (isWall(cx - 1, cz)) ao(x, y, d, tp, x, 0, x + d, 0);
+      if (isWall(cx + 1, cz)) ao(x + tp - d, y, d, tp, x + tp, 0, x + tp - d, 0);
+      if (isWall(cx, cz - 1)) ao(x, y, tp, d, 0, y, 0, y + d);
+      if (isWall(cx, cz + 1)) ao(x, y + tp - d, tp, d, 0, y + tp, 0, y + tp - d);
     }
   }
   // Under-wall cells (hidden by the wall boxes) in a neutral dark.
   g.fillStyle = '#16181a';
-  for (let cz = 0; cz < height; cz++) for (let cx = 0; cx < width; cx++) if (isWall(cx, cz)) g.fillRect(cx * px, cz * px, px, px);
+  for (let cz = 0; cz < height; cz++) for (let cx = 0; cx < width; cx++) if (isWall(cx, cz)) g.fillRect(cx * tp, cz * tp, tp, tp);
 
   return toTexture(c);
 }
@@ -373,7 +395,7 @@ export function wallTexture(theme) {
     g.fillRect(0, 116, 128, 12);
     g.fillStyle = 'rgba(255,255,255,0.15)';
     g.fillRect(0, 116, 128, 1);
-    return toTexture(c);
+    return toTexture(c, { repeat: true });
   });
 }
 
@@ -385,7 +407,7 @@ export function capTexture(theme) {
     g.fillStyle = shade(theme.cap, 1);
     g.fillRect(0, 0, 64, 64);
     speckle(g, rand, 0, 0, 64, 64, 200, 0.07);
-    return toTexture(c);
+    return toTexture(c, { repeat: true });
   });
 }
 

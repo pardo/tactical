@@ -3,7 +3,7 @@ import { DT, TICK_RATE } from './constants.js';
 import { headingTo, sin, cos, length, wrapAngle, PI } from './fmath.js';
 import { hasLineOfSight } from './los.js';
 import { damageSoldier, EYE_HEIGHT } from './soldier/soldier.js';
-import { worldToCell, cellCenter } from './map.js';
+import { CELL, worldToCell, cellCenter } from './map.js';
 import { destroyCover } from './cover.js';
 
 export const GRENADE_RANGE = 14;
@@ -92,8 +92,9 @@ function detonate(world, g) {
 
 function shatterCover(world, x, z, radius) {
   const { cx, cz } = worldToCell(world.map, x, z);
-  for (let dz = -2; dz <= 2; dz++) {
-    for (let dx = -2; dx <= 2; dx++) {
+  const R = Math.ceil(radius / CELL);
+  for (let dz = -R; dz <= R; dz++) {
+    for (let dx = -R; dx <= R; dx++) {
       const c = cellCenter(world.map, cx + dx, cz + dz);
       if (length(c.x - x, c.z - z) <= radius) destroyCover(world, cx + dx, cz + dz);
     }

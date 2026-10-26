@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CELL } from '../sim/map.js';
 import { GRENADE } from '../sim/grenades.js';
 import { createParticleSystem, glowTexture, puffTexture } from './particles.js';
 
@@ -27,11 +28,11 @@ const rand = (a, b) => a + Math.random() * (b - a);
  * Short-lived effects driven by sim events: muzzle flashes, tracers, casings, impacts,
  * explosions, debris; plus grenade meshes and smoke clouds drawn from frame state.
  *
- * @param mapSize { width, height } so cell events can be placed in the world
+ * @param mapSize { sizeX, sizeZ } (metres) so tile events can be placed in the world
  * @param hooks { onShake(strength 0..1, x, z), onFlash(strength 0..1, x, z) } for camera shake / white-out
  */
-export function createFxView(scene, mapSize = { width: 0, height: 0 }, hooks = {}) {
-  const mapHalf = { w: mapSize.width / 2, h: mapSize.height / 2 };
+export function createFxView(scene, mapSize = { sizeX: 0, sizeZ: 0 }, hooks = {}) {
+  const mapHalf = { w: (mapSize.sizeX ?? 0) / 2, h: (mapSize.sizeZ ?? 0) / 2 };
   const group = new THREE.Group();
   scene.add(group);
   const glowTex = glowTexture();
@@ -216,14 +217,15 @@ export function createFxView(scene, mapSize = { width: 0, height: 0 }, hooks = {
 
   /** Chunks of a destroyed cover tile flying out, plus dust. */
   function debris(e) {
-    const x = e.cx - mapHalf.w + 0.5;
-    const z = e.cz - mapHalf.h + 0.5;
-    for (let i = 0; i < 12; i++) {
+    const x = (e.cx + 0.5) * CELL - mapHalf.w;
+    const z = (e.cz + 0.5) * CELL - mapHalf.h;
+    // A blast takes out many tiles at once: a few chunks each adds up to a good burst.
+    for (let i = 0; i < 3; i++) {
       const a = rand(0, Math.PI * 2);
       const s = rand(1.5, 4);
       bits.spawn({ x, y: 0.5, z, vx: Math.cos(a) * s, vy: rand(1.5, 4), vz: Math.sin(a) * s, gravity: 9.8, life: rand(1, 1.6), size0: rand(0.07, 0.14), color0: col(0x8a7350), alpha0: 1, alpha1: 0.7, floor: 0.03 });
     }
-    for (let i = 0; i < 6; i++) soft.spawn({ x, y: 0.4, z, vx: rand(-1, 1), vy: rand(0.3, 1), vz: rand(-1, 1), drag: 1.5, life: rand(0.8, 1.3), size0: 0.4, size1: 1.4, color0: C.dust, alpha0: 0.6, alpha1: 0 });
+    if (Math.random() < 0.4) soft.spawn({ x, y: 0.4, z, vx: rand(-1, 1), vy: rand(0.3, 1), vz: rand(-1, 1), drag: 1.5, life: rand(0.8, 1.3), size0: 0.4, size1: 1.4, color0: C.dust, alpha0: 0.6, alpha1: 0 });
   }
 
   // Smoke clouds: a churning set of big soft puffs per cloud, kept in step with frame state.
